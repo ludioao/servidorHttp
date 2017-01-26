@@ -7,16 +7,9 @@
 
 #define CRLF      "\r\n"
 #define SPACE     " "
-#define DIRECTORY "test"
+#define DIRECTORY "www"
 #define PREVDIR   "/.."
-#define CSS       "text/css"
-#define HTML      "text/html"
-#define PLAINTEXT "text/plain"
-#define APP_JS    "application/javascript"
-#define APP_PHP   "application/php"
-#define PNG       "image/png"
-#define JPG       "image/jpeg"
-#define GIF       "image/gif"
+#define HTTPSERVER_VERSION "HTTP/1.1"
 
 #define BACKLOG        128
 #define BODY_LENGTH    16777216
@@ -25,6 +18,10 @@
 #define PORT           8086 // Porta para escuta.
 #define SLEEP_MSEC     1000
 #define TIME_OUT       1.0
+
+#define URL_MOCKUP "<a href='%s'>%s</a>\n"
+#define DIRECTORY_MOCKUP "<p><b><a href='%s'>%s</a></b></p>\n"
+
 
 using std::fstream;
 using std::string;
@@ -40,10 +37,6 @@ enum http_version_t {
 
 enum http_status_t {
     CONTINUE = 0, OK, BAD_REQUEST, NOT_FOUND, REQUEST_ENTITY_TOO_LARGE, REQUEST_URI_TOO_LARGE, NOT_IMPLEMENTED,
-};
-
-const string versions[] = {
-    "HTTP/1.0", "HTTP/1.1", "HTTP/2.0",
 };
 
 const string statuses[] = {

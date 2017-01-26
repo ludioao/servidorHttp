@@ -31,6 +31,9 @@ using std::vector;
 
 static bool running = true;
 
+const unsigned char IS_FILE_FLAG = 0x8;
+
+
 ////////////////////////////////////////////////
 //              Sig Handlers                  //
 ////////////////////////////////////////////////
@@ -344,9 +347,7 @@ HttpServer::RunMultiProcessed(bool verbose) {
     
     if (verbose) {
         cout << "Server starting...\n\n";
-
         cout << "Currently at port " << server.getPortNumber() << endl;
-
     }
 
     // Event loop
@@ -676,6 +677,8 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
     string copy = request.get_copy();
     string response = "";
     
+    // Stat - used to check if is a Directory and showList.
+
     // HTTP request info
     http_method_t method = request.get_method();
 
@@ -683,28 +686,129 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
     int index = 0;
     int c = 0;
     
-    // Open file and try to fulfill request
-    file.open(path, fstream::in);
-    if (!file.good()) {
-        perror("fstream::open");
-        status = NOT_FOUND;
+    cout << "PATH ==> " << path << endl;
+
+
+    if (IsDirectory(path)) {
+        body = CreateIndexHtml(path);
+    }
+    else {
+        // Open file and try to fulfill request
+        
+        file.open(path, fstream::in);
+        if (!file.good()) {
+            perror("fstream::open");
+            status = NOT_FOUND;
+        }
+
+        if (method == GET && status == OK) {           
+                // Get all characters in file
+                c = file.get();
+                while (c != EOF && index <= BODY_LENGTH) {
+                    body += (char) c;
+                    index++;
+                    c = file.get();
+                }           
+        }
+        file.close();        
     }
 
-    if (method == GET && status == OK) {
-       
-            // Get all characters in file
-            c = file.get();
-            while (c != EOF && index <= BODY_LENGTH) {
-                body += (char) c;
-                index++;
-                c = file.get();
-            }
-       
-    }
-    file.close();
     response = CreateResponseString(request, response, body, status);
+
     return response;
 }
+
+bool
+HttpServer::IsDirectory(const string path)
+{
+    struct stat s;
+    if (stat(path.c_str(), &s) == 0)
+        if (s.st_mode & S_IFDIR)
+            return true;
+    
+    return false;
+}
+
+string
+HttpServer::CreateIndexHtml(const string path)
+{
+
+    string   response = "<!doctype html><html><head>";
+            response += "<title>Index of " + path  + "</title>";
+            response += "</head><body>";
+            response += "<h1>Index of " + path + "</h1>";
+            response += CreateIndexList(path);
+            response += "</body>";
+            response += "</html>";
+
+    return response;
+
+}
+
+string
+HttpServer::CreateIndexList(const string actualFullPath)
+{
+
+    // Get Files and Directories
+    DIR *dirObj;
+    struct dirent *node;
+
+    dirObj = opendir(actualFullPath.c_str());
+
+    vector<string> files;
+    vector<string> directories;
+
+    // read entire directory
+    if (dirObj != NULL)
+    {
+        while( (node = readdir(dirObj)) ) {
+            if (node->d_type == IS_FILE_FLAG) {
+                files.push_back( string(node->d_name) );
+            }
+            else {
+                directories.push_back( string(node->d_name) );
+            }
+        }
+    }
+    // close directory
+    closedir(dirObj);
+
+
+    // sort files by name
+    sort(files.begin(), files.end());
+    // sort directories by name
+    sort(directories.begin(), directories.end());
+
+    // response
+    string response;
+
+    // buffer to change from char* to string
+    char responseBuffer[1000];
+
+
+    // add directories to response
+    for (string dir : directories)
+    {
+        sprintf(responseBuffer, DIRECTORY_MOCKUP, dir.c_str(), dir.c_str());
+        response += string(responseBuffer);
+        memset(responseBuffer, 0, 1000);
+    }
+    
+    response += "<ul>"; 
+    for (string file : files)
+    {
+        response += "<li>";
+        sprintf(responseBuffer, URL_MOCKUP, file.c_str(), file.c_str());
+        response += string(responseBuffer);
+        memset(responseBuffer, 0, 1000);
+        response += "</li>";
+    }
+    response += "</ul>";
+
+    return response;
+}
+
+
 
 string 
 HttpServer::CreateResponseString(HttpRequest request, string response, string body, http_status_t status) {
@@ -726,7 +830,7 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
     gmnow = gmtime(&now);
 
     // Append status line and body to buffer
-    newresponse += versions[version];
+    newresponse += HTTPSERVER_VERSION;
     newresponse += SPACE;
     newresponse += statuses[status];
     newresponse += CRLF;
@@ -766,15 +870,11 @@ HttpServer::GetMethod(const string method) {
     return INVALID_METHOD;
 }
 
+/*
+Funcao para verificar se a versao do HTTP client eh 1.1
+*/
 http_version_t 
 HttpServer::GetVersion(const string version) {
-    /*if (version.compare("HTTP/1.0") == 0) {
-        return ONE_POINT_ZERO;
-      else if (version.compare("HTTP/1.1") == 0) {
-        return ONE_POINT_ONE;
-    } else if (version.compare("HTTP/2.0") == 0) {
-        return TWO_POINT_ZERO;
-    }*/
     if (version.compare("HTTP/1.1") == 0) 
         return ONE_POINT_ONE;
 
@@ -793,7 +893,7 @@ HttpServer::GetMimeType(string extension) {
     /* conteudo padrao, p/ caso nao tenha na lista de mimetypes */
     string contentType = "unknown";
 
-    
+
     if(it != MimeTypes.end())
             contentType = (*it).second;
     return contentType;
@@ -857,6 +957,8 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type) {
         extension += path[i];
         i++;
     }
+
+    cout << "call extension " << endl;
 
     // Interpret MIME type using extension string
     type = GetMimeType(extension);

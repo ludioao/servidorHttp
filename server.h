@@ -7,8 +7,12 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
 #include <unistd.h>
 #include <fstream>
+#include <algorithm>    // std::sort
+#include <vector>       // std::vector
 #include "http.h"
 
 #define ACCEPT_RANGES  "Accept-Ranges: "
@@ -108,13 +112,18 @@ class HttpServer {
         // Response creating method
         string HandleGet(HttpRequest request, http_status_t status);
         
-        string CreateResponseString(HttpRequest request, string response, string body, http_status_t status);
+        string CreateResponseString(HttpRequest request, string response, string body, http_status_t status);   
+
+
         
         // Helper methods
         http_method_t GetMethod(const string method);
         http_version_t GetVersion(const string version);
         string GetMimeType(string extension);
         void ParseUri(string& uri, string& path, string& query, string& type);
+        string CreateIndexHtml(const string path);
+        string CreateIndexList(const string path);
+        bool IsDirectory(const string path);
 };
 
 #endif
