@@ -19,8 +19,6 @@
 #define SLEEP_MSEC     1000
 #define TIME_OUT       1.0
 
-#define URL_MOCKUP "<a href='%s'>%s</a>\n"
-#define DIRECTORY_MOCKUP "<p><b><a href='%s'>%s</a></b></p>\n"
 
 
 using std::fstream;

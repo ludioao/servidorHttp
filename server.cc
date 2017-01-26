@@ -8,6 +8,7 @@
 #include <sstream>
 #include <fcntl.h>
 #include <map>
+#include <regex>
 #include <vector>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -28,6 +29,8 @@ using std::stringstream;
 using std::system;
 using std::to_string;
 using std::vector;
+using std::regex;
+using std::regex_replace;
 
 static bool running = true;
 
@@ -71,6 +74,7 @@ char hexToAscii(string hex) {
     ascii += num;
     return (char) ascii;
 }
+
 
 ////////////////////////////////////////////////
 //              SocketServer                  //
@@ -734,12 +738,12 @@ HttpServer::CreateIndexHtml(const string path)
 {
 
     string   response = "<!doctype html><html><head>";
-            response += "<title>Index of " + path  + "</title>";
+            response += "<title>Index of /" + path  + "</title>";
             response += "</head><body>";
             response += "<h1>Index of " + path + "</h1>";
             response += CreateIndexList(path);
             response += "</body>";
-            response += "</html>";
+            response += "</html> ";
 
     return response;
 
@@ -773,6 +777,10 @@ HttpServer::CreateIndexList(const string actualFullPath)
     // close directory
     closedir(dirObj);
 
+    // remove dot links
+    //directories.erase( std::remove(directories.begin(), directories.end(), string("..")), directories.end() );
+    directories.erase( std::remove(directories.begin(), directories.end(), string(".")), directories.end() );
+
 
     // sort files by name
     sort(files.begin(), files.end());
@@ -781,32 +789,52 @@ HttpServer::CreateIndexList(const string actualFullPath)
 
     // response
     string response;
+    string fileFormatted = "";
+    string dirName = "";
 
-    // buffer to change from char* to string
-    char responseBuffer[1000];
+    // get current path to make an url.
+    string urlPath = regex_replace(actualFullPath, regex("\\www"), "");
+
+    // remove last character "null"
+    if (urlPath.back() == '\0') {
+        urlPath.pop_back();
+    }
+
 
 
     // add directories to response
     for (string dir : directories)
     {
-        sprintf(responseBuffer, DIRECTORY_MOCKUP, dir.c_str(), dir.c_str());
-        response += string(responseBuffer);
-        memset(responseBuffer, 0, 1000);
+        // add last trailing slash to navigate between directories
+        if (urlPath.back() != '/') {
+            urlPath = urlPath + "/";
+        }
+
+        if (dir.compare("..") == 0) {
+           fileFormatted = urlPath + "../";
+           dirName = "Parent directory";
+        }
+        else {
+            dirName = dir;
+            fileFormatted = urlPath + dir;
+        }
+
+        response += "<a href='" + fileFormatted + "'>"+ dirName + "</a><br/>\n";
     }
     
     response += "<ul>"; 
     for (string file : files)
     {
         response += "<li>";
-        sprintf(responseBuffer, URL_MOCKUP, file.c_str(), file.c_str());
-        response += string(responseBuffer);
-        memset(responseBuffer, 0, 1000);
+        fileFormatted = urlPath + file;
+        response += "<a href='" + fileFormatted + "'>"+ file + "</a>\n";
         response += "</li>";
     }
     response += "</ul>";
 
     return response;
 }
+
 
 
 
@@ -819,7 +847,7 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
     // Request fields
     int contentlen = body.length() == 0 ? 0 : body.length() - 1;
     http_method_t method = request.get_method();
-    http_version_t version = request.get_version();
+    //http_version_t version = ;
     string type = request.get_content_type();
 
     // Create a new response
@@ -910,7 +938,7 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type) {
 
     // Sanitize string, checking for weird relative paths such as "/.."
     // "/." is ok
-    while (relpath != string::npos) {
+    while (relpath != (int) string::npos) {
         uri.erase(relpath, strlen(PREVDIR));
         relpath = uri.find(PREVDIR);
     }
@@ -953,7 +981,7 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type) {
         i--;
     }
     i++;
-    while (i <= path.length() && !isspace(path[i]) && path[i] != (char) NULL) {
+    while (i <= (int) path.length() && !isspace(path[i]) && path[i] != (char) NULL) {
         extension += path[i];
         i++;
     }
