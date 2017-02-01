@@ -20,7 +20,6 @@
 #define TIME_OUT       1.0
 
 
-
 using std::fstream;
 using std::string;
 using std::vector;
