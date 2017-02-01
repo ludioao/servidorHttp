@@ -110,36 +110,40 @@ bool SocketServer::Receive(bool verbose, pair<int, string> client) {
     int connection = client.first;
     string peer = client.second;
 
-    // Receive bytes from client connection
+    // Recebe os primeiros bytes da conexao
     int count = recv(connection, recvbuf, BUFFER_LENGTH, 0);
-    if (count <= 0) {
+    if (count <= 0) 
         return false;
-    }
     
-    // Logging and NULL termination
-    recvbuf[count] = (char) NULL;
+    // helper p/ adicionar null no final do buffer de recebimento.
+    recvbuf[count] = (char) NULL;    
+
     if (verbose) {
-        cout << "Received " << count << " bytes from " << peer << ":\n";
+        cout << "Server Log: RECEIVED " << count << " BYTES FROM " << peer << ":\n";
         cout << recvbuf << endl;
     }
+    
     return true;
 }
 
+// Servidor Socket enviar Resposta.
 bool SocketServer::SendResponse(string buffer, int connection) {
-    // Send buffer over socket, no need for NULL termination
+    
+    // Envia o buffer pro socket
     int count = send(connection, buffer.c_str(), buffer.length() - 1, 0);
     if (count < 0) {
-        perror("send");
+        perror("Socket Server: Fail to send response.");
         return false;
     }
     return true;
 }
 
+// Servidor socket finaliza a conexao.
 bool SocketServer::Close(int connection) {
-    // Close connection specified by file descriptor
+    // Fecha a conexao especificada pelo arquivo.
     int error = close(connection);
     if (error < 0) {
-        perror("close");
+        perror("Socket Server: Fail to close connection.");
         return false;
     }
     return true;

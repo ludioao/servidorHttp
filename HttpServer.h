@@ -50,29 +50,26 @@ class HttpServer {
         // Inicializar MimeTypes;
         void InitMimeTypes();
 
-        // Multi-process request handling
+        // Metodos p/ trabalhar com requisicoes multi-processos.
         void Start(tipoServidor type, bool verbose, long int portNumber, int);
         void RunMultiProcessed(bool verbose);
         void DispatchRequestToChild(bool verbose, pair<int, string> client);
 
-        // Multi-threaded request handling
+        // Metodos p/ trbalhar com threads.
         void RunMultiThreaded(bool verbose);
         void* DispatchRequestToThread(bool verbose, pair<int, string> client);
         static void* CallDispatchRequestToThread(void* args); 
 
-        // Request handling methods
+        // Metodos para tratar requisicoes.
         void ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf);
-        string HandleRequestThreaded(HttpRequest& request, bool verbose);
+        string getThreadRequest(HttpRequest& request, bool verbose);
         string HandleRequest(HttpRequest& request, bool verbose);
 
-        // Response creating method
-        string HandleGet(HttpRequest request, http_status_t status);
-        
+        // Metodo p/ tratar envio de resposta.
+        string HandleGet(HttpRequest request, http_status_t status);        
         string CreateResponseString(HttpRequest request, string response, string body, http_status_t status);   
 
-        /*
-        Metodos helpers
-        */
+        // Helpers.
         http_method_t GetMethod(const string method);
         http_version_t GetVersion(const string version);
         string GetMimeType(string extension);

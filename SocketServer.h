@@ -17,10 +17,10 @@ using namespace std;
 
 
 #define BUFFER_LENGTH  8191
-#define BACKLOG        128
+#define BACKLOG        128 // limite maximo 
 
 enum tipoServidor {
-    MPROCESS = 0, MTHREADED, EVENTED,
+    MPROCESS = 0, MTHREADED
 };
 
 struct mthreaded_request_args {
@@ -35,29 +35,32 @@ class SocketServer {
         // Porta do Servidor
         long int portNumber;
 
+        // Numero maximo de Threads p/ programa processar.
         int maxThreads;
 
-
-        // Addresses for the server and the client
+        
+        // Enderecos para o servidor e o cliente
         struct sockaddr_in serveraddr;
         struct sockaddr_in clientaddr;
+
         char peername[INET_ADDRSTRLEN];
 
-         
-        // Socket file descriptors
-        int listening;
-        char recvbuf[BUFFER_LENGTH + 1];
+        // Helper de arquivo socket.
+        int listening; // helper p/ escuta.
+        char recvbuf[BUFFER_LENGTH + 1]; // buffer de recebimento
+
     public:
         // Constructor/Destructor
         SocketServer();
         ~SocketServer();
 
-        // Receiving buffer
+        // Recebendo o buffer.
         const char* get_buffer() { return recvbuf; }
 
+        // Inicializando Socket.
         void Init();
 
-        // Socket call wrapper methods
+        // Metodo wrapper de chamada de socket.
         pair<int, string> Connect();
         bool Receive(bool verbose, pair<int, string> client);
         bool SendResponse(string buffer, int connection);
@@ -67,8 +70,8 @@ class SocketServer {
         void setPortNumber(long int number);
         long int getPortNumber();
 
-        // Helper methods
+        // Metodos helper.
         int getMaxThreads(){ return maxThreads; };
-        void setMaxThreads(int val){ maxThreads = val; std::cout << "setei ess abagaca " << maxThreads << std::endl; };
+        void setMaxThreads(int val){ maxThreads = val; /* std::cout << "setei ess abagaca " << maxThreads << std::endl; */ };
 };
 #endif
