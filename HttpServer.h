@@ -1,19 +1,24 @@
 #pragma once
-#ifndef SERVER_H
-#define SERVER_H
+#ifndef HTTPSERVER_H
+#define HTTPSERVER_H
 
+#include <algorithm>
+#include <cerrno>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
+#include <ctime>
+#include <iostream>
+#include <sstream>
+#include <fcntl.h>
 #include <map>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
+#include <regex>
+#include <vector>
 #include <sys/types.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <unistd.h>
-#include <fstream>
-#include <algorithm>    // std::sort
-#include <vector>       // std::vector
-#include "http.h"
+#include <sys/wait.h>
+#include <sys/socket.h>
+#include "SocketServer.h"
+#include "HttpRequest.h"
 
 #define ACCEPT_RANGES  "Accept-Ranges: "
 #define BYTES          "bytes"
@@ -22,64 +27,7 @@
 #define DATE           "Date: "
 #define TMPFILE        "tmpfile.out"
 
-using std::map;
-using std::pair;
-
-//typedef              MIMETYPES;
-
-enum tipoServidor {
-    MPROCESS = 0, MTHREADED, EVENTED,
-};
-
-struct mthreaded_request_args {
-    pair<int, string> client;
-    void* ptr;
-    bool verbose;
-};
-
-class SocketServer {
-    private:
-        
-        // Porta do Servidor
-        long int portNumber;
-
-        int maxThreads;
-
-
-        // Addresses for the server and the client
-        struct sockaddr_in serveraddr;
-        struct sockaddr_in clientaddr;
-        char peername[INET_ADDRSTRLEN];
-
-         
-        // Socket file descriptors
-        int listening;
-        char recvbuf[BUFFER_LENGTH + 1];
-    public:
-        // Constructor/Destructor
-        SocketServer();
-        ~SocketServer();
-
-        // Receiving buffer
-        const char* get_buffer() { return recvbuf; }
-
-        void Init();
-
-        // Socket call wrapper methods
-        pair<int, string> Connect();
-        bool Receive(bool verbose, pair<int, string> client);
-        bool SendResponse(string buffer, int connection);
-        bool Close(int connection);
-
-        // Seta porta de operacao
-        void setPortNumber(long int number);
-        long int getPortNumber();
-
-
-        // Helper methods
-        int getMaxThreads(){ return maxThreads; };
-        void setMaxThreads(int val){ maxThreads = val; std::cout << "setei ess abagaca " << maxthreads << std::endl; };
-};
+using namespace std;
 
 class HttpServer {
 
@@ -134,4 +82,6 @@ class HttpServer {
         bool IsDirectory(const string path);
 };
 
+
 #endif
+
