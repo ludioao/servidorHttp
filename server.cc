@@ -226,12 +226,7 @@ HttpServer::HttpServer()
 
 
 HttpServer::~HttpServer() {
-    // Clean up allocated memory from cache
-    while (!cache.empty()) {
-        HttpRequest* request = cache.back().first;
-        delete request;
-        cache.pop_back();
-    }
+    cout << "Finalizando HTTPServer " << endl;
 }
 
 
@@ -316,7 +311,7 @@ HttpServer::InitMimeTypes()
 
 
 void 
-HttpServer::Start(tipoServidor type, bool verbose, long int port_Operacao) {
+HttpServer::Start(tipoServidor type, bool verbose, long int port_Operacao, int numberThreads) {
     
     // Add signal handlers
     signal(SIGINT, handleSigint);
@@ -338,8 +333,10 @@ HttpServer::Start(tipoServidor type, bool verbose, long int port_Operacao) {
 
     } else if (type == MTHREADED) {
         cout << " THREADED " << endl;
+        server.setMaxThreads(numberThreads);
         RunMultiThreaded(verbose);
-
+        cout << "numero de threads "<< numberThreads << endl;
+        
     } 
 }
 
@@ -426,7 +423,7 @@ HttpServer::RunMultiThreaded(bool verbose) {
     // Initialize thread attributes and mutex
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-    pthread_mutex_init(&cachemutex, NULL);
+
     if (verbose) {
         cout << "Server starting...\n\n";
     }
@@ -435,7 +432,15 @@ HttpServer::RunMultiThreaded(bool verbose) {
     while (running) {
         client = server.Connect();
         connection = client.first;
-        if (connection > 0) {
+
+  /*      cout << "threadlist  " << threadlist.size() << endl;
+
+        cout << "connection passou a ser " << connection << endl;
+
+        cout << "threadlist size is " << threadlist.size() << endl;
+        cout << "maxthreads size is " << getMaxThreads() << endl;
+*/
+        if (connection > 0 && (int) threadlist.size() <= server.getMaxThreads()) {
             // Create a new thread and dispatch thread
             args.verbose = verbose;
             args.client = client;
@@ -467,7 +472,7 @@ HttpServer::RunMultiThreaded(bool verbose) {
 
     // Clean up mutex and attributes
     pthread_attr_destroy(&attr);
-    pthread_mutex_destroy(&cachemutex);
+    
 
     // Allow main thread to exit while waiting for any threads to finish
     pthread_exit(NULL);
@@ -480,7 +485,7 @@ HttpServer::DispatchRequestToThread(bool verbose, pair<int, string> client) {
     time_t begin;
     time_t end;
     int connection = client.first;
-    bool cached = false;
+    
         
     // End process when elapsed time exceeds time out interval
     time(&begin);
@@ -493,7 +498,7 @@ HttpServer::DispatchRequestToThread(bool verbose, pair<int, string> client) {
             ParseRequest(*request, verbose, server.get_buffer());
 
             // Lock mutex before call
-            response = HandleRequestThreaded(*request, verbose, cached);
+            response = HandleRequestThreaded(*request, verbose);
             server.SendResponse(response, connection);
         }
         // Calculate elapsed time
@@ -501,13 +506,6 @@ HttpServer::DispatchRequestToThread(bool verbose, pair<int, string> client) {
         elapsedtime = difftime(end, begin);
     } while (elapsedtime < TIME_OUT);
 
-    // Add item to cache
-    if (!cached) {
-        // Lock cache while updating
-        pthread_mutex_lock(&cachemutex);
-        cache.push_back(make_pair(request, response));
-        pthread_mutex_unlock(&cachemutex);
-    }
 
     // Close connection and exit
     server.Close(connection);
@@ -589,39 +587,10 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
 }
 
 string 
-HttpServer::HandleRequestThreaded(HttpRequest& request, bool verbose, bool& cached) {
-    HttpRequest* cachedreq;
+HttpServer::HandleRequestThreaded(HttpRequest& request, bool verbose) {
     string response = "";
 
-    // Lock cache and try to read
-    if (verbose) {
-        cout << "Searching cache...\n";
-    }
-    for (auto item = cache.begin(); item != cache.end(); item++) {
-        // Check cache for saved response
-        cachedreq = (*item).first;
-        response = (*item).second;
-        if (request.Equals(*cachedreq)) {
-            if (verbose) {
-                cout << "Serving from cache\n\n";
-            }
-            cached = true;
-        }
-    }
-    // Release lock
-    pthread_mutex_unlock(&cachemutex);
-
-    if (!cached) {
-        // Not found, create a new response
-        if (verbose) {
-            cout << "Not found in cache.\n";
-        }
-        response = HandleRequest(request, verbose);
-    } else {
-        if (verbose) {
-            cout << endl << "Response: " << response << endl << endl;
-        }
-    }
+    response = HandleRequest(request, verbose);
 
     return response;
 }
@@ -636,7 +605,8 @@ HttpServer::HandleRequest(HttpRequest& request, bool verbose) {
     string type = request.get_content_type();
     string response = "";
     fstream file;
-    
+
+
     // HTTP flow diagram starts here
     if (toolong) {
         // Request entity too large

@@ -40,9 +40,11 @@ struct mthreaded_request_args {
 class SocketServer {
     private:
         
-
         // Porta do Servidor
         long int portNumber;
+
+        int maxThreads;
+
 
         // Addresses for the server and the client
         struct sockaddr_in serveraddr;
@@ -72,6 +74,11 @@ class SocketServer {
         // Seta porta de operacao
         void setPortNumber(long int number);
         long int getPortNumber();
+
+
+        // Helper methods
+        int getMaxThreads(){ return maxThreads; };
+        void setMaxThreads(int val){ maxThreads = val; std::cout << "setei ess abagaca " << maxthreads << std::endl; };
 };
 
 class HttpServer {
@@ -82,8 +89,9 @@ class HttpServer {
         vector<pair<HttpRequest*, string> > cache;
         double elapsedtime;
         pthread_attr_t attr;
-        pthread_mutex_t cachemutex;
+        //pthread_mutex_t cachemutex;
         map<string, string> MimeTypes;
+        int maxthreads;
 
         
     public:
@@ -95,7 +103,7 @@ class HttpServer {
         void InitMimeTypes();
 
         // Multi-process request handling
-        void Start(tipoServidor type, bool verbose, long int portNumber);
+        void Start(tipoServidor type, bool verbose, long int portNumber, int);
         void RunMultiProcessed(bool verbose);
         void DispatchRequestToChild(bool verbose, pair<int, string> client);
 
@@ -106,7 +114,7 @@ class HttpServer {
 
         // Request handling methods
         void ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf);
-        string HandleRequestThreaded(HttpRequest& request, bool verbose, bool& cached);
+        string HandleRequestThreaded(HttpRequest& request, bool verbose);
         string HandleRequest(HttpRequest& request, bool verbose);
 
         // Response creating method
@@ -114,9 +122,9 @@ class HttpServer {
         
         string CreateResponseString(HttpRequest request, string response, string body, http_status_t status);   
 
-
-        
-        // Helper methods
+        /*
+        Metodos helpers
+        */
         http_method_t GetMethod(const string method);
         http_version_t GetVersion(const string version);
         string GetMimeType(string extension);
