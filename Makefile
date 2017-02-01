@@ -1,19 +1,13 @@
 CPPC=g++
-CC=gcc
-CFLAGS=-c -g -Wall -pthread -lpthread
+CFLAGS= -pedantic -W -Wall -pthread -lpthread
 STD=-std=c++11
 VERBOSE=-v
 
-all: main.o server.o
-	$(CPPC) server.o main.o -o servidorHttp -lpthread
+all:
+	$(CPPC) $(STD) $(CFLAGS) *.cpp -o servidorHttp
 
 clean:
 	rm -rf servidorHttp *.o *.dSYM
 
-main.o: main.cc
-	$(CPPC) $(CFLAGS) $(STD) main.cc
-
-server.o: server.cc
-	$(CPPC) $(CFLAGS) $(STD) server.cc 
 
 
