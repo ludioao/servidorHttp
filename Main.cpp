@@ -1,8 +1,22 @@
-#include <iostream>
-#include "server.h"
-#include "http.h"
-#include <stdlib.h>
+#include <algorithm>
+#include <cerrno>
+#include <cstdlib>
+#include <cstdio>
 #include <cstring>
+#include <ctime>
+#include <iostream>
+#include <sstream>
+#include <fcntl.h>
+#include <map>
+#include <regex>
+#include <vector>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <stdlib.h>
+#include "SocketServer.h"
+#include "HttpServer.h"
+#include "HttpRequest.h"
+
 
 using namespace std;
 
@@ -58,7 +72,7 @@ int main(int argc, char* argv[])
 
     HttpServer HttpdObj;
 
-    HttpdObj.Start(type, showLog, runPort);
+    HttpdObj.Start(type, showLog, runPort, numberofThreads);
     
     return 0;
 }

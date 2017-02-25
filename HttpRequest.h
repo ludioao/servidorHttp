@@ -2,8 +2,25 @@
 #ifndef HTTP_H
 #define HTTP_H
 
+
+#include <algorithm>
+#include <cerrno>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
+#include <ctime>
 #include <iostream>
+#include <sstream>
+#include <fcntl.h>
+#include <map>
+#include <regex>
 #include <vector>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/socket.h>
+
+using namespace std;
+
 
 #define CRLF      "\r\n"
 #define SPACE     " "
@@ -11,18 +28,11 @@
 #define PREVDIR   "/.."
 #define HTTPSERVER_VERSION "HTTP/1.1"
 
-#define BACKLOG        128
 #define BODY_LENGTH    16777216
-#define BUFFER_LENGTH  8191
 #define URI_MAX_LENGTH 4095
-#define PORT           8086 // Porta para escuta.
+#define PORT           8080 // Porta padrao para escuta (qdo nao passado)
 #define SLEEP_MSEC     1000
 #define TIME_OUT       1.0
-
-
-using std::fstream;
-using std::string;
-using std::vector;
 
 enum http_method_t {
     INVALID_METHOD = -1, GET, POST, PUT, DELETE,
@@ -68,16 +78,16 @@ public:
     HttpRequest();
     ~HttpRequest();
 
-    // Equality operator
+    // helper pra comparacao de requisicao.
     bool Equals(HttpRequest& other) {
         return (method == other.get_method() && version == other.get_version() && path.compare(other.get_path()) == 0 && query.compare(other.get_query()) == 0);
     }
 
-    // Initialization and reset method
+    // Inicializacao do Request
     void Initialize(http_method_t method, http_version_t version, string copy, string path, string query, string type);
     void Reset();
 
-    // Header parsing 
+    // Parseamento do cabecalho.
     void ParseHeaders(const char* buffer, int index);
 
     // Getters
@@ -101,5 +111,3 @@ public:
 };
 
 #endif
-
-// End of header

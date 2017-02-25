@@ -1,3 +1,6 @@
+/*
+Arquivo principal do servidor HTTP.
+*/
 #include <algorithm>
 #include <cerrno>
 #include <cstdlib>
@@ -12,50 +15,42 @@
 #include <vector>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <fstream>
 
+#include "HttpRequest.h"
+#include "HttpServer.h"
 
-#include "http.h"
-#include "server.h"
-
-using std::cerr;
-using std::cout;
-using std::endl;
-using std::fstream;
-using std::make_pair;
-using std::pair;
-using std::streambuf;
-using std::string;
-using std::stringstream;
-using std::system;
-using std::to_string;
-using std::vector;
-using std::regex;
-using std::regex_replace;
+using namespace std;
 
 static bool running = true;
 
 const unsigned char IS_FILE_FLAG = 0x8;
 
-
-////////////////////////////////////////////////
-//              Sig Handlers                  //
-////////////////////////////////////////////////
+/*
+    Helper para Controle de Signals.
+*/
 void handleSigint(int signum) {
-    // Turn off event loop
+    // Finaliza o loop.
     running = false;
 }
 
 void handleSigchld(int signum) {
-    // Prevent zombie processes
+    // Previne processos zombies.
     int status;
     while (waitpid(-1, &status, WNOHANG) == 0);
 }
 
-////////////////////////////////////////////////
-//              Misc Helpers                  //
-////////////////////////////////////////////////
-
-// Hex to ASCII helper, used for parsing URIs
+/*
+    Helper p/ conversao de Hexadecimal p/ ASCII 
+*/
 char hexToAscii(string hex) {
     int ascii = 0;
     int num;
@@ -76,164 +71,20 @@ char hexToAscii(string hex) {
 }
 
 
-////////////////////////////////////////////////
-//              SocketServer                  //
-////////////////////////////////////////////////
-
-SocketServer::SocketServer()
-{
-    cout << "Instanciando SocketServer " << endl;
-}
-
-void
-SocketServer::Init() {
-    int error = 0;
-    int flags = 0;
-
-    // Zero initialize buffers and socket addresses
-    memset(recvbuf, (char) NULL, sizeof(recvbuf));
-    memset(peername, (char) NULL, sizeof(peername));
-    memset(&serveraddr, (char) NULL, sizeof(serveraddr));
-    memset(&clientaddr, (char) NULL, sizeof(clientaddr));
-
-    // Create a socket and bind to our host address
-    listening = socket(AF_INET, SOCK_STREAM, 0);
-    if (listening < 0) {
-        perror("socket");
-        close(listening);
-        exit(EXIT_FAILURE);
-    }
-
-    // Set socket reuse and non-blocking options
-    setsockopt(listening, SOL_SOCKET, SO_REUSEADDR, NULL, 0);
-    flags = fcntl(listening, F_GETFL, 0);
-    fcntl(listening, F_SETFL, flags | O_NONBLOCK);
-
-    // Server socket information
-    serveraddr.sin_family = AF_INET;
-    serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serveraddr.sin_port = htons(getPortNumber());
-
-
-    cout << "serveraddr.sin_port => " << serveraddr.sin_port <<  endl;
-    // Mensagem inicializando; ;
-
-    // Bind socket to a local address
-    error = bind(listening, (const struct sockaddr *) &serveraddr, sizeof(serveraddr));
-    if (error < 0) {
-        perror("bind");
-        close(listening);
-        exit(EXIT_FAILURE);
-    }
-
-    // Listen for connections
-    error = listen(listening, BACKLOG);
-    if (error < 0) {
-        perror("listen");
-        close(listening);
-        exit(EXIT_FAILURE);
-    }
-
-
-}
-
-SocketServer::~SocketServer() {
-    // Close listening socket 
-    close(listening);
-}
-
-void 
-SocketServer::setPortNumber(long int number)
-{
-    portNumber = number;
-    
-}
-
-long int
-SocketServer::getPortNumber()
-{
-    return portNumber;
-}
-
-std::pair<int, string> SocketServer::Connect() {
-    // Accept any incoming connections
-    socklen_t length = sizeof(clientaddr);
-    int error = 0;
-    int connection = accept(listening, NULL, NULL);
-    string peer = "";
-
-    if (connection > 0) {
-        // Get connecting client's network info
-        error = getpeername(connection, (struct sockaddr *)&clientaddr, &length);
-        if (error < 0) {
-            perror("getpeername");
-            memset(peername, (char) NULL, sizeof(peername));
-        } else {
-            inet_ntop(AF_INET, &(clientaddr.sin_addr), peername, length);
-            peer = string(peername);
-        }
-    }
-    return make_pair(connection, peer);
-}
-
-bool SocketServer::Receive(bool verbose, pair<int, string> client) {
-    int connection = client.first;
-    string peer = client.second;
-
-    // Receive bytes from client connection
-    int count = recv(connection, recvbuf, BUFFER_LENGTH, 0);
-    if (count <= 0) {
-        return false;
-    }
-    
-    // Logging and NULL termination
-    recvbuf[count] = (char) NULL;
-    if (verbose) {
-        cout << "Received " << count << " bytes from " << peer << ":\n";
-        cout << recvbuf << endl;
-    }
-    return true;
-}
-
-bool SocketServer::SendResponse(string buffer, int connection) {
-    // Send buffer over socket, no need for NULL termination
-    int count = send(connection, buffer.c_str(), buffer.length() - 1, 0);
-    if (count < 0) {
-        perror("send");
-        return false;
-    }
-    return true;
-}
-
-bool SocketServer::Close(int connection) {
-    // Close connection specified by file descriptor
-    int error = close(connection);
-    if (error < 0) {
-        perror("close");
-        return false;
-    }
-    return true;
-}
-
-////////////////////////////////////////////////
-//              HttpServer                    //
-////////////////////////////////////////////////
-HttpServer::HttpServer()
-{
+// Construtor do HttpServer.
+HttpServer::HttpServer() {
     elapsedtime = 0.0;
     InitMimeTypes();
 }
 
-
+// Destrutor do HttpServer.
 HttpServer::~HttpServer() {
     cout << "Finalizando HTTPServer " << endl;
 }
 
-
-
+// Definindo MimeTypes.
 void
-HttpServer::InitMimeTypes()
-{    
+HttpServer::InitMimeTypes() {    
     MimeTypes["doc"]    = "application/msword";
     MimeTypes["bin"]    = "application/octet-stream";
     MimeTypes["dll"]    = "application/octet-stream";
@@ -307,15 +158,18 @@ HttpServer::InitMimeTypes()
     MimeTypes["wcgi"]   = "wwwserver/isapi";
 }
 
-// End of file
 
-
+/*
+Tipo de Servidor;
+Verbose => Usado para debugar;
+Port_Operacao => Porta para iniciar Operacao;
+numberThreads => Quando o tipo de servidor eh Multithread. Entao utiliza-se o numero de threads fixo.
+*/
 void 
 HttpServer::Start(tipoServidor type, bool verbose, long int port_Operacao, int numberThreads) {
     
-    // Add signal handlers
-    signal(SIGINT, handleSigint);
-    signal(SIGCHLD, handleSigchld);
+    signal(SIGINT, handleSigint); // Envia sinal de inicializacao. 
+    signal(SIGCHLD, handleSigchld); // Envia sinal p/ processo filho.
 
     // Porta default
     server.setPortNumber(port_Operacao);
@@ -326,7 +180,7 @@ HttpServer::Start(tipoServidor type, bool verbose, long int port_Operacao, int n
     cout << "Inicializando servidor na porta " << actualPortNumber << endl;
     cout << "Modo de operacao:";
 
-    // Run with flag options
+    // Recebe o tipo de arquivo.
     if (type == MPROCESS) {
         cout << " MULTIPROCESSO " << endl;
         RunMultiProcessed(verbose);
@@ -335,146 +189,150 @@ HttpServer::Start(tipoServidor type, bool verbose, long int port_Operacao, int n
         cout << " THREADED " << endl;
         server.setMaxThreads(numberThreads);
         RunMultiThreaded(verbose);
-        cout << "numero de threads "<< numberThreads << endl;
-        
+        cout << "numero de threads "<< numberThreads << endl;        
     } 
 }
 
+/*
+Inicia o servidor em modo 
+de MultiProcesso.
+*/
 void 
 HttpServer::RunMultiProcessed(bool verbose) {
     pid_t pid;
     pair<int, string> client;
-    int connection;
+    int actualConnection;
     
     if (verbose) {
-        cout << "Server starting...\n\n";
-        cout << "Currently at port " << server.getPortNumber() << endl;
+        cout << "Server inicializando...\n\n";
+        cout << "Portal atual: " << server.getPortNumber() << endl;
     }
 
-    // Event loop
+    // Evento de loop.
     while (running) {
 
-        // Wait for a connection
+        // Aguarda por uma conexao.
         client = server.Connect();
-        connection = client.first;
+        actualConnection = client.first;
 
-        if (connection > 0) {
-            // Fork a new server process to handle client connection
+        if (actualConnection > 0) {
+            // Executa fork de um novo processo filho p/ receber a conexao cliente.
             pid = fork();
             if (pid < 0) {
-                // Error 
-                perror("fork");
+                perror("Http Server: Fail to fork child.");
                 continue;
             } else if (pid == 0) {
-                // Child process
+                // Processo filho
                 DispatchRequestToChild(verbose, client);
             } else {
-                // Parent process
-                server.Close(connection);
+                // Voltando p/ processo pai. Finaliza a conexao.
+                server.Close(actualConnection);
             }
         }
-        // Sleep if not connected
+        
+        // processo fica em stand-by
         usleep(SLEEP_MSEC);
     }
     if (verbose) {
-        cout << "Server shutting down...\n";
+        cout << "Servidor desligando\n";
     }
 }
 
+
+
+/*Despacha a requisicao pro processo filho.*/
 void 
 HttpServer::DispatchRequestToChild(bool verbose, pair<int, string> client) {
     HttpRequest request;
     string response;
-    time_t begin;
-    time_t end;
-    int connection = client.first;
+    time_t begin, end; // definicao de tmepo da requisicao.
+    int actualConnection = client.first;
 
-    // End process when elapsed time exceeds time out interval
-    time(&begin);
-    time(&end);
+    // Finaliza processo quando o tempo passado excede o tempo limite
+    time(&begin);    time(&end);
     elapsedtime = difftime(end, begin);
 
     do {
         if (server.Receive(verbose, client)) { 
-            // Handle request and send response
+            // Recebe request e envia resposta.
             ParseRequest(request, verbose, server.get_buffer());
             response = HandleRequest(request, verbose);
-            server.SendResponse(response, connection);
+            server.SendResponse(response, actualConnection);
         }
-        // Calculate elapsed time
+        // Calcula o tempo passado.
         time(&end);
         elapsedtime = difftime(end, begin);
     } while (elapsedtime < TIME_OUT);
 
-    // Close connection and exit
-    server.Close(connection);
+    // Fecha conexao e finaliza o processo.
+    server.Close(actualConnection);
     exit(EXIT_SUCCESS);
 }
 
 void 
 HttpServer::RunMultiThreaded(bool verbose) {
-    vector<pthread_t> threadlist;
-    pthread_t newthread;
-    mthreaded_request_args args;
+    vector<pthread_t> threadList;
+    pthread_t newThread;
+    mthreaded_request_args threadArgs;
     pair<int, string> client;
-    int connection;
+    int actualConnection;
     int error;
 
-    // Initialize thread attributes and mutex
+    // Inicializa tratamento das threads e mutex.
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
     if (verbose) {
-        cout << "Server starting...\n\n";
+        cout << "Server inicializando...\n\n";
     }
 
-    // Event loop waits for any new connections
+    // Loop escutando por cliente.
     while (running) {
         client = server.Connect();
-        connection = client.first;
+        actualConnection = client.first;
 
-  /*      cout << "threadlist  " << threadlist.size() << endl;
+  /*      cout << "threadList  " << threadList.size() << endl;
 
-        cout << "connection passou a ser " << connection << endl;
+        cout << "actualConnection passou a ser " << actualConnection << endl;
 
-        cout << "threadlist size is " << threadlist.size() << endl;
+        cout << "threadList size is " << threadList.size() << endl;
         cout << "maxthreads size is " << getMaxThreads() << endl;
 */
-        if (connection > 0 && (int) threadlist.size() <= server.getMaxThreads()) {
-            // Create a new thread and dispatch thread
-            args.verbose = verbose;
-            args.client = client;
-            args.ptr = this;
+        if (actualConnection > 0 && (int) threadList.size() <= server.getMaxThreads()) {
+            
+            // Cria uma nova thread e despacha.
+            threadArgs.verbose = verbose;
+            threadArgs.client = client;
+            threadArgs.ptr = this;
 
-            // Add new thread to threadlist
-            error = pthread_create(&newthread, &attr, HttpServer::CallDispatchRequestToThread, &args);
+            // Adiciona a Thread em uma lista.
+            error = pthread_create(&newThread, &attr, HttpServer::CallDispatchRequestToThread, &threadArgs);
             if (error < 0) {
-                perror("pthread_create");
+                perror("HttpServer: THREAD - fail to pthread_create");
             }
-            threadlist.push_back(newthread);
+            threadList.push_back(newThread);
         }
-        // Sleep if no connections
+        // Sleep if no actualConnections
         usleep(SLEEP_MSEC);
     }
 
     if (verbose) {
-        cout << "Server shutting down...\n";
+        cout << "Servidor desligando\n";
     }
 
-    // Join all finished threads
-    while (!threadlist.empty()) {
-        error = pthread_join(threadlist.back(), NULL);
+    // Pthread Join em todas as threads finalizadas.
+    while (!threadList.empty()) {
+        error = pthread_join(threadList.back(), NULL);
         if (error < 0) {
-            perror("pthread_join");
+            perror("HttpServer: THREAD - fail to pthread_join");
         }
-        threadlist.pop_back();
+        threadList.pop_back();
     }
 
-    // Clean up mutex and attributes
+    // Limpa mutex e seus atributos.
     pthread_attr_destroy(&attr);
-    
 
-    // Allow main thread to exit while waiting for any threads to finish
+    // Permite que a thread principal finalize enquanto aguarda as demais.
     pthread_exit(NULL);
 }
 
@@ -484,31 +342,29 @@ HttpServer::DispatchRequestToThread(bool verbose, pair<int, string> client) {
     string response;
     time_t begin;
     time_t end;
-    int connection = client.first;
-    
-        
-    // End process when elapsed time exceeds time out interval
+    int actualConnection = client.first;
+
+    // Finaliza o processo quando o tempo de resposta excede o limite.
     time(&begin);
     time(&end);
     elapsedtime = difftime(end, begin);
 
     do {
         if (server.Receive(verbose, client)) { 
-            // Handle request and send response
+            // Recebe a requisicao e responde.
             ParseRequest(*request, verbose, server.get_buffer());
 
-            // Lock mutex before call
-            response = HandleRequestThreaded(*request, verbose);
-            server.SendResponse(response, connection);
+            // Trava a mutex antes de chama-lo.
+            response = getThreadRequest(*request, verbose);
+            server.SendResponse(response, actualConnection);
         }
-        // Calculate elapsed time
+        // Calcula o tempo corrido.
         time(&end);
         elapsedtime = difftime(end, begin);
     } while (elapsedtime < TIME_OUT);
 
-
-    // Close connection and exit
-    server.Close(connection);
+    // Fecha a conexao atual e finaliza.
+    server.Close(actualConnection);
     pthread_exit(NULL);
 }
 
@@ -528,40 +384,40 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
     int i = 0;
     http_method_t method;
     http_version_t version;
-    string buffer = "";
-    string path = "";
-    string query = "";
-    string type = "";
-    string uri = "";
-
-    // Keep a copy of the original request string
+    string  buffer = "",
+            path = "",
+            query = "",
+            type = "",
+            uri = "";
+    
+    // Mantem uma copia da requisicao original
     string copy = recvbuf;
 
-    // Get method string
+    // Capta o metodo da requisicao.
     while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
         buffer += recvbuf[i];
         i++;
     }
     i++;
 
-    // Parse method
+    // Metodo parser.
     method = GetMethod(buffer);
     if (verbose && method == INVALID_METHOD) {
-        cout << "Unrecognized HTTP method\n";
+        cout << "Metodo HTTP nao reconhecido.\n";
     }
 
-    // Get URI
+    // captar URI (endereco de arquivo.)
     while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
         uri += recvbuf[i];
         i++;
     }
     path = DIRECTORY;
 
-    // Parse URI, sanitizing output
+    // parsear a url recebida e remover caracteres especiais.
     ParseUri(uri, path, query, type);
-    i++;
+    i++; 
     if (verbose && path.length() > URI_MAX_LENGTH) {
-        cout << "Request URI too long.\n";
+        cout << "Requisicao muito longa.\n";
     }
 
     // Get version number
@@ -571,23 +427,23 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
         i++;
     }
 
-    // Skip to next line
-    while (isspace(recvbuf[i])) {
+    // pula pra proxima linha
+    while (isspace(recvbuf[i])) 
         i++;
-    }
-
-    // Parse version number
+    
+    // parsea a versao do http.
     version = GetVersion(buffer);
     if (verbose && version == INVALID_VERSION) {
-        cout << "Invalid HTTP version.\n";
+        cout << "Versao do HTTP invalida..\n";
     }
 
-    // Fill request struct
+    // Preenche a struct de request.
     request.Initialize(method, version, copy, path, query, type);
 }
 
+// Wrapper pra receber requisicao do thread.
 string 
-HttpServer::HandleRequestThreaded(HttpRequest& request, bool verbose) {
+HttpServer::getThreadRequest(HttpRequest& request, bool verbose) {
     string response = "";
 
     response = HandleRequest(request, verbose);
@@ -641,42 +497,40 @@ HttpServer::HandleRequest(HttpRequest& request, bool verbose) {
 
 string 
 HttpServer::HandleGet(HttpRequest request, http_status_t status) {
-    // File streams for reading
+    
+    // file string to get.
     fstream file;
-
-    // String variables for file streams and the HTTP response
     string body = "";
     string path = request.get_path();
     string type = request.get_content_type();
     string copy = request.get_copy();
     string response = "";
     
-    // Stat - used to check if is a Directory and showList.
+    // stat, usado p/ verificar se o arquivo eh uma pasta e mostrar a lista de arquivos.
 
-    // HTTP request info
+    // informacao do request http
     http_method_t method = request.get_method();
 
-    // Misc values
-    int index = 0;
-    int c = 0;
+    // variaveis temporarias;
+    int index = 0, c = 0;
     
     cout << "PATH ==> " << path << endl;
-
 
     if (IsDirectory(path)) {
         body = CreateIndexHtml(path);
     }
     else {
-        // Open file and try to fulfill request
         
+        // Abre o arquivo.
         file.open(path, fstream::in);
         if (!file.good()) {
-            perror("fstream::open");
+            perror("Server Error: Fail to open file.");
             status = NOT_FOUND;
         }
 
         if (method == GET && status == OK) {           
-                // Get all characters in file
+                
+                // parsea todos os caracteres do arquivo
                 c = file.get();
                 while (c != EOF && index <= BODY_LENGTH) {
                     body += (char) c;
@@ -732,7 +586,7 @@ HttpServer::CreateIndexList(const string actualFullPath)
     vector<string> files;
     vector<string> directories;
 
-    // read entire directory
+    // leia o diretorio inteiro.
     if (dirObj != NULL)
     {
         while( (node = readdir(dirObj)) ) {
@@ -744,42 +598,40 @@ HttpServer::CreateIndexList(const string actualFullPath)
             }
         }
     }
-    // close directory
+    
+    // fecha a pasta.
     closedir(dirObj);
 
-    // remove dot links
-    //directories.erase( std::remove(directories.begin(), directories.end(), string("..")), directories.end() );
+    // remove os links de recursao.
     directories.erase( std::remove(directories.begin(), directories.end(), string(".")), directories.end() );
 
-
-    // sort files by name
+    // ordena os arquivos pelo nome
     sort(files.begin(), files.end());
-    // sort directories by name
+    // ordena os diretorios pelo nome
     sort(directories.begin(), directories.end());
 
-    // response
+    // prepara a resposta.
     string response;
     string fileFormatted = "";
     string dirName = "";
 
-    // get current path to make an url.
+    // remove o "www" do caminho..
     string urlPath = regex_replace(actualFullPath, regex("\\www"), "");
 
-    // remove last character "null"
+    // remove o ultimo caractere nulo.
     if (urlPath.back() == '\0') {
         urlPath.pop_back();
     }
 
-
-
-    // add directories to response
+    // adiciona as pastas na lista
     for (string dir : directories)
     {
-        // add last trailing slash to navigate between directories
+        // adiciona barra no final p/ navegar entre as pastas.
         if (urlPath.back() != '/') {
             urlPath = urlPath + "/";
         }
 
+        // renomear links ".."
         if (dir.compare("..") == 0) {
            fileFormatted = urlPath + "../";
            dirName = "Parent directory";
@@ -806,34 +658,31 @@ HttpServer::CreateIndexList(const string actualFullPath)
 }
 
 
-
-
+// Criar response string.
 string 
 HttpServer::CreateResponseString(HttpRequest request, string response, string body, http_status_t status) {
-    // Time structs for GMT time
+    
     time_t now;
     struct tm* gmnow;
 
-    // Request fields
     int contentlen = body.length() == 0 ? 0 : body.length() - 1;
     http_method_t method = request.get_method();
-    //http_version_t version = ;
     string type = request.get_content_type();
 
-    // Create a new response
+    // Cria uma nova resposta.
     string newresponse = response;
 
-    // Get GMT time
+    // retorna o tempo GMT
     time(&now);
     gmnow = gmtime(&now);
 
-    // Append status line and body to buffer
+    // prepara resposta
     newresponse += HTTPSERVER_VERSION;
     newresponse += SPACE;
     newresponse += statuses[status];
     newresponse += CRLF;
 
-    // For GET only
+    // Este programa esta apenas funcionando com metodos GET.
     if (status == OK && method == GET) {
         newresponse += ACCEPT_RANGES;
         newresponse += BYTES;
@@ -845,7 +694,7 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
         newresponse += std::to_string(contentlen);
         newresponse += CRLF;
     }
-    // Add time and body
+    // adiciona hora e resposta.
     newresponse += DATE;
     newresponse += asctime(gmnow);
     newresponse += CRLF;
@@ -858,13 +707,7 @@ http_method_t
 HttpServer::GetMethod(const string method) {
     if (method.compare("GET") == 0) {
         return GET;
-    } else if (method.compare("POST") == 0) {
-        return POST;
-    } else if (method.compare("PUT") == 0) {
-        return PUT;
-    } else if (method.compare("DELETE") == 0) {
-        return DELETE;
-    }
+    } 
     return INVALID_METHOD;
 }
 
@@ -906,46 +749,46 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type) {
     string extension = "";
     char c;
 
-    // Sanitize string, checking for weird relative paths such as "/.."
-    // "/." is ok
+    //Remove caracteres, verificando do tipo "/.."
+
     while (relpath != (int) string::npos) {
         uri.erase(relpath, strlen(PREVDIR));
         relpath = uri.find(PREVDIR);
     }
     length = uri.length();
     
-    // Get path right before query, while sanitizing unsafe ascii characters
-    // "%HEX" is interpreted as the character with ascii value HEX
-    // "+" is interpreted as a space character
+    // Retorna o caminho correto antes de enviar, 
+    // tambem remove caracteres especiais q nao estao na tabela ascii.
+
+    // %HEX eh interpretado como um caractere com o valor hexadecimal da tabela Ascii.
+    // + eh interpretado como um caractere de espaco
     while (i <= length && uri[i] != '?') {
         if (uri[i] == '%') {
-            // Unsafe ascii conversion
+            // Conversao ascii nao segura.
             i++;
             hex += uri[i];
             i++;
             hex += uri[i];
             c = hexToAscii(hex);
         } else if (uri[i] == '+') {
-            // Space
-            c = ' ';
+            c = ' '; // Espaco
         } else {
-            // Safe ascii
-            c = uri[i];   
+            c = uri[i];   // Ascii ok!!
         }
         path += c;
         i++;
     }
 
-    // Skip past '?'
+    // pula caractere '?'
     i++;
 
-    // Get query
+    // retorna a query
     while (i <= length) {
         query += uri[i];
         i++;
     }
 
-    // Get type from path
+    // pega o tipo do caminho.
     i = path.length();
     while (i > 0 && path[i] != '.') {
         i--;
@@ -956,15 +799,13 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type) {
         i++;
     }
 
-    cout << "call extension " << endl;
-
-    // Interpret MIME type using extension string
+    // Interpreta o mimetype usando a extensao
     type = GetMimeType(extension);
 }
 
-////////////////////////////////////////////////
-//              HttpRequest                   //
-////////////////////////////////////////////////
+
+/*Funcoes do HTTPREQUEST.*/
+
 HttpRequest::HttpRequest(http_method_t method, http_version_t version, string copy, string path, string query, string type) {
     Initialize(method, version, copy, path, query, type);
 }
@@ -974,7 +815,6 @@ HttpRequest::HttpRequest() {
 }
 
 void HttpRequest::Initialize(http_method_t method, http_version_t version, string copy, string path, string query, string type) {
-    // Call parent initialization
     toolong = false;
     this->method = method;
     this->version = version;
@@ -992,34 +832,37 @@ void HttpRequest::ParseHeaders(const char* buffer, int index) {
     const Header* header;
 
     while (i <= length) {
-        // Get name of header
+        // Pega o nome do cabecalho.
         while (i <= length && buffer[i] != ':') {
             name += buffer[i];
             i++;
         }
-        // Increment twice for : 
+        // incrementa em 2.
         i += 2;
 
-        // Get value of header
+        // retorna o valor do header.
         while (i <= length && buffer[i] != '\r') {
             value += buffer[i];
             i++;
         }
-        // Increment twice for \r\n
+        // pula os caracteres \r\n
         i += 2;
         
-        // Add new header struct
+        // adiciona a nova struct de header.
         if (!isspace(name.c_str()[0])) {
             header = new Header(name, value);
             headers.push_back(header);
         }
         
-        // Reset fields
+        // Limpa os campos.
         name = "";
         value = "";
     }
 }
 
+/*
+    reseta o http.
+ */
 void HttpRequest::Reset() {
     path = "";
     type = "";
