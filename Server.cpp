@@ -298,7 +298,7 @@ HttpServer::RunMultiThreaded(bool verbose) {
         cout << "threadList size is " << threadList.size() << endl;
         cout << "maxthreads size is " << getMaxThreads() << endl;
 */
-        if (actualConnection > 0 && (int) threadList.size() <= server.getMaxThreads()) {
+        if (actualConnection > 0) {
             
             // Cria uma nova thread e despacha.
             threadArgs.verbose = verbose;
@@ -349,6 +349,8 @@ HttpServer::DispatchRequestToThread(bool verbose, pair<int, string> client) {
     time(&end);
     elapsedtime = difftime(end, begin);
 
+    Pthread_detach(pthread_self());
+
     do {
         if (server.Receive(verbose, client)) { 
             // Recebe a requisicao e responde.
@@ -378,6 +380,13 @@ HttpServer::CallDispatchRequestToThread(void* args) {
     return ((HttpServer*) ptr)->DispatchRequestToThread(verbose, client); 
 }
 
+void 
+HttpServer::Pthread_detach(pthread_t tid)
+{
+    int rc;
+    if ((rc = pthread_detach(tid)) != 0)
+        perror("Pthread_detach error");
+}
 
 void 
 HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf) {
@@ -388,7 +397,9 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
             path = "",
             query = "",
             type = "",
-            uri = "";
+            uri = "",
+            hostName = "",
+            uriRequested = "";
     
     // Mantem uma copia da requisicao original
     string copy = recvbuf;

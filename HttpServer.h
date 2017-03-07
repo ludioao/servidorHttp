@@ -17,6 +17,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
+#include <pthread.h>
 #include "SocketServer.h"
 #include "HttpRequest.h"
 
@@ -77,6 +78,14 @@ class HttpServer {
         string CreateIndexHtml(const string path);
         string CreateIndexList(const string path);
         bool IsDirectory(const string path);
+
+        // Thread management
+        void Pthread_detach(pthread_t tid);
+
+        // Proxy management
+        void connectToServer(const string & upstreamHost, unsigned short upstreamPort);
+
+
 };
 
 
