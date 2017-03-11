@@ -72,7 +72,7 @@ class HttpServer {
         http_method_t GetMethod(const string method);
         http_version_t GetVersion(const string version);
         string GetMimeType(string extension);
-        void ParseUri(string& uri, string& path, string& query, string& type, string &hostName);
+        void ParseUri(string& uri, string& path, string& query, string& type, string &hostName, int &port);
         
         // Thread management
         void Pthread_detach(pthread_t tid);
@@ -80,6 +80,12 @@ class HttpServer {
         // Proxy management
         void connectToServer(const string & upstreamHost, unsigned short upstreamPort);
 
+        // 
+        void serveFile();
+        void downloadFileRemote();
+        void serveFromCache();
+
+        string downloadFile(string hostName, string uri, int port);        
 
 };
 

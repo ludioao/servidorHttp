@@ -24,6 +24,7 @@ Arquivo principal do servidor HTTP.
 #include <dirent.h>
 #include <unistd.h>
 #include <fstream>
+#include <string>
 
 #include "HttpRequest.h"
 #include "HttpServer.h"
@@ -33,6 +34,11 @@ using namespace std;
 static bool running = true;
 
 const unsigned char IS_FILE_FLAG = 0x8;
+
+void console_log(const string text)
+{
+    cout << text << endl;
+}
 
 /*
     Helper para Controle de Signals.
@@ -176,16 +182,12 @@ HttpServer::Start(bool verbose, long int port_Operacao, int numberThreads) {
     server.Init();
 
     long int actualPortNumber = server.getPortNumber();
-    
-    cout << "Inicializando servidor na porta " << actualPortNumber << endl;
-    cout << "Modo de operacao:";
 
-    // Recebe o tipo de arquivo.
-    cout << " THREADED " << endl;
-    server.setMaxThreads(numberThreads);
-    RunMultiThreaded(verbose);
-    cout << "numero de threads "<< numberThreads << endl;        
+    console_log("Inicializando servidor na porta " + actualPortNumber);
     
+    // Recebe o tipo de arquivo.
+    server.setMaxThreads(numberThreads);
+    RunMultiThreaded(verbose);    
 }
 
 
@@ -313,18 +315,18 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
     int i = 0;
     http_method_t method;
     http_version_t version;
+    int port = DEFAULT_REMOTE_PORT;
     string  buffer = "",
             path = "",
             query = "",
             type = "",
             uri = "",
             hostName = "",
-            uriRequested = "";
+            uriRequested = "",
+            userAgent = "";
     
     // Mantem uma copia da requisicao original
     string copy = recvbuf;
-
-    cout << "REQUISICAO DO CLIENTE " << copy << endl;
 
     // Capta o metodo da requisicao.
     while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
@@ -348,7 +350,8 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
     
 
     // parsear a url recebida e remover caracteres especiais.
-    ParseUri(uri, path, query, type, hostName);
+    cout << "Parseando URI" << endl;
+    ParseUri(uri, path, query, type, hostName, port);
     i++; 
     if (verbose && path.length() > URI_MAX_LENGTH) {
         cout << "Requisicao muito longa.\n";
@@ -371,8 +374,17 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
         cout << "Versao do HTTP invalida..\n";
     }
 
+    console_log("Method: " + method);
+    console_log("version: " + version);
+    console_log("copy: " + copy);
+    console_log("path: " + path);
+    console_log("query: " + query);
+    console_log("hostname: " + hostName);
+    console_log("port: " + port);
+    
+
     // Preenche a struct de request.
-    request.Initialize(method, version, copy, path, query, type);
+    request.Initialize(method, version, copy, path, query, type, hostName, port);
 }
 
 // Wrapper pra receber requisicao do thread.
@@ -446,33 +458,75 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
     http_method_t method = request.get_method();
 
     // variaveis temporarias;
-    int index = 0, c = 0;
+    //int index = 0, c = 0;
     
     cout << "PATH ==> " << path << endl;
 
-        // Abre o arquivo.
-        /*file.open(path, fstream::in);
-        if (!file.good()) {
-            perror("Server Error: Fail to open file.");
-            status = NOT_FOUND;
-        }*/
 
-    /*    if (method == GET && status == OK) {           
-                
-                // parsea todos os caracteres do arquivo
-                c = file.get();
-                while (c != EOF && index <= BODY_LENGTH) {
-                    body += (char) c;
-                    index++;
-                    c = file.get();
-                }           
-        }
-        file.close();        
+    //perror("Server Cache: Not found in cache");
+    //status = NOT_FOUND;
+
+    status = OK;
+
+    // check if is in cache service.
+    if (method == GET && status == OK) 
+    {
+
+    }
+
     
+    string host = request.get_host_name();
 
-    response = CreateResponseString(request, response, body, status);*/
+    cout << "Calling for host: " << host << endl;
+
+    string teste = downloadFile(host, "/", 80);
+    body = teste.c_str();
+    response = CreateResponseString(request, response, body, status);
 
     return response;
+}
+
+/*https://raw.githubusercontent.com/ludioao/sisloc/master/README.md*/
+
+string
+HttpServer::downloadFile(string hostName, string uri, int port)
+{
+    ClientSocket c;
+
+    string response = "";
+    response.clear();
+     
+    //connect to host
+    c.connectToHost(hostName, port);
+     
+    //send some data    
+    string request_data;
+    request_data = "GET " + uri + " HTTP/1.1\n";
+    //request_data.append( HDR_ENDLINE );
+    request_data.append("Host");
+    request_data.append(HDR_DELIMETER);
+    request_data.append(hostName);
+    request_data.append(HDR_ENDLINE);
+    request_data.append("Connection");
+    request_data.append(HDR_DELIMETER);
+    request_data.append("close");
+    request_data.append(HDR_ENDLINE);
+    request_data.append(HDR_ENDLINE);
+            
+    console_log("Sending data to server...");
+    console_log(request_data);
+    console_log("");
+
+    c.sendDataHost(request_data.c_str());
+
+     
+    //receive and echo reply
+    console_log("----------------------------\n\n");
+    response = c.receiveFromHost( );
+    console_log("\n\n----------------------------\n\n");  
+
+    return response;
+
 }
 
 // Criar response string.
@@ -522,9 +576,6 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
 
 http_method_t 
 HttpServer::GetMethod(const string method) {
-
-    cout << "Parseando metodo " << method << endl;
-
     if (method.compare("GET") == 0) {
         return GET;
     } 
@@ -561,7 +612,7 @@ HttpServer::GetMimeType(string extension) {
 }
 
 void 
-HttpServer::ParseUri(string& uri, string& path, string& query, string& type, string &hostName) {
+HttpServer::ParseUri(string& uri, string& path, string& query, string& type, string &hostName, int &port) {
     int relpath = uri.find(PREVDIR);
     int protocolIndex = uri.find("://");
     int length;
@@ -570,25 +621,41 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type, str
     string extension = "";
     string tmpProtocol = "";
     string tmphostName;
+    string tmpPort = "";
     char c;
 
 
+
+    /* Verifica protocolo requisitado */
     if (protocolIndex != (int) string::npos) {
         tmpProtocol = uri.substr(0, protocolIndex);
-        tmphostName = uri.substr(protocolIndex, uri.length());
-        cout << "Protocolo requisitado " << tmpProtocol << endl;
-        
+        tmphostName = uri.substr(protocolIndex + 3, uri.length());
+        console_log("Temphostname is " + tmphostName);
+        cout << "Protocolo requisitado " << tmpProtocol << endl;        
         if (! (tmpProtocol.compare("http") == 0 || tmpProtocol.compare("https") ) ) {
             perror("Protocolo invalido!");            
         }
-
     }
     
-    int firstBackslash = hostName.find("/");
+    int firstBackslash = tmphostName.find("/");
 
+    
     if (firstBackslash != (int) string::npos) {
-        hostName = tmphostName.substr(protocolIndex, firstBackslash);
-        cout << "Host solicitado: " << hostName << endl;
+        hostName = tmphostName.substr(0, firstBackslash);
+        
+        // Verifica se tem porta passada explicitamente.
+        int portIndex = hostName.find(":");
+        if (portIndex != (int) string::npos) {
+            tmpPort = hostName.substr(portIndex + 1, hostName.length());
+            port = stoi(tmpPort);
+
+            console_log("Porta explicita " + port);
+
+            hostName = hostName.substr(0, portIndex);
+
+            console_log("host name definido como " + hostName);
+
+        }
     }
 
     // indice dos ":"
@@ -650,15 +717,15 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type, str
 
 /*Funcoes do HTTPREQUEST.*/
 
-HttpRequest::HttpRequest(http_method_t method, http_version_t version, string copy, string path, string query, string type) {
-    Initialize(method, version, copy, path, query, type);
+HttpRequest::HttpRequest(http_method_t method, http_version_t version, string copy, string path, string query, string type,  string hostName, int port) {
+    Initialize(method, version, copy, path, query, type, hostName, port);
 }
 
 HttpRequest::HttpRequest() {
-    Initialize(INVALID_METHOD, INVALID_VERSION, "", "", "", "");
+    Initialize(INVALID_METHOD, INVALID_VERSION, "", "", "", "", "", 80);
 }
 
-void HttpRequest::Initialize(http_method_t method, http_version_t version, string copy, string path, string query, string type) {
+void HttpRequest::Initialize(http_method_t method, http_version_t version, string copy, string path, string query, string type,  string hostName, int port) {
     toolong = false;
     this->method = method;
     this->version = version;
@@ -666,6 +733,8 @@ void HttpRequest::Initialize(http_method_t method, http_version_t version, strin
     this->path = path;
     this->query = query;
     this->type = type;
+    this->host_name = hostName;
+    this->port = port;
 }
 
 void HttpRequest::ParseHeaders(const char* buffer, int index) {
@@ -719,3 +788,137 @@ void HttpRequest::Reset() {
 }
 
 HttpRequest::~HttpRequest() {}
+
+
+
+
+
+
+
+
+
+/*
+* Client Socket
+*/
+
+
+ClientSocket::ClientSocket()
+{
+    sock = -1;
+    port = 0;
+    address = "";
+}
+ 
+/**
+    Connect to a host on a certain port number
+*/
+bool ClientSocket::connectToHost(string address , int port)
+{
+    //create socket if it is not already created
+    if(sock == -1)
+    {
+        //Create socket
+        sock = socket(AF_INET , SOCK_STREAM , 0);
+        if (sock == -1)
+        {
+            perror("Could not create socket");
+        }
+         
+        cout<<"Socket created\n";
+    }
+    else    {   /* OK , nothing */  }
+     
+    //setup address structure
+    if(inet_addr(address.c_str()) == -1)
+    {
+        struct hostent *he;
+        struct in_addr **addr_list;
+         
+        //resolve the hostname, its not an ip address
+        if ( (he = gethostbyname( address.c_str() ) ) == NULL)
+        {
+            //gethostbyname failed
+            herror("gethostbyname");
+            console_log("Failed to resolve hostname");
+            //return  
+        }
+         
+        //Cast the h_addr_list to in_addr , since h_addr_list also has the ip address in long format only
+        addr_list = (struct in_addr **) he->h_addr_list;
+ 
+        for(int i = 0; addr_list[i] != NULL; i++)
+        {
+            //strcpy(ip , inet_ntoa(*addr_list[i]) );
+            server.sin_addr = *addr_list[i];
+             
+            cout<<address<<" resolved to "<<inet_ntoa(*addr_list[i])<<endl;
+             
+            break;
+        }
+    }
+     
+    //plain ip address
+    else
+    {
+        server.sin_addr.s_addr = inet_addr( address.c_str() );
+    }
+     
+    server.sin_family = AF_INET;
+    server.sin_port = htons( port );
+     
+    //Connect to remote server
+    if (connect(sock , (struct sockaddr *)&server , sizeof(server)) < 0)
+    {
+        perror("connect failed. Error");
+        return 1;
+    }
+     
+    cout<<"Connected\n";
+    return true;
+}
+ 
+/**
+    Send data to the connected host
+*/
+bool ClientSocket::sendDataHost(string data)
+{
+    //Send some data
+    if( send(sock , data.c_str() , strlen( data.c_str() ) , 0) < 0)
+    {
+        perror("Send failed : ");
+        return false;
+    }
+    cout<<"Data send\n";
+     
+    return true;
+}
+ 
+/**
+    Receive data from the connected host
+*/
+string ClientSocket::receiveFromHost()
+{
+    char buffer[BUFFER_LENGTH];
+    memset( buffer, '\0', sizeof(char)*BUFFER_LENGTH );
+    string reply;
+     
+    //Receive a reply from the server
+    if( recv(sock , buffer , sizeof(buffer) , 0) < 0)
+    {
+        puts("recv failed");
+    }
+     
+    reply = buffer;
+    return reply;
+}
+ 
+
+
+
+
+
+
+
+
+
+
