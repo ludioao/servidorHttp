@@ -166,7 +166,7 @@ Port_Operacao => Porta para iniciar Operacao;
 numberThreads => Quando o tipo de servidor eh Multithread. Entao utiliza-se o numero de threads fixo.
 */
 void 
-HttpServer::Start(tipoServidor type, bool verbose, long int port_Operacao, int numberThreads) {
+HttpServer::Start(bool verbose, long int port_Operacao, int numberThreads) {
     
     signal(SIGINT, handleSigint); // Envia sinal de inicializacao. 
     signal(SIGCHLD, handleSigchld); // Envia sinal p/ processo filho.
@@ -181,93 +181,13 @@ HttpServer::Start(tipoServidor type, bool verbose, long int port_Operacao, int n
     cout << "Modo de operacao:";
 
     // Recebe o tipo de arquivo.
-    if (type == MPROCESS) {
-        cout << " MULTIPROCESSO " << endl;
-        RunMultiProcessed(verbose);
-
-    } else if (type == MTHREADED) {
-        cout << " THREADED " << endl;
-        server.setMaxThreads(numberThreads);
-        RunMultiThreaded(verbose);
-        cout << "numero de threads "<< numberThreads << endl;        
-    } 
-}
-
-/*
-Inicia o servidor em modo 
-de MultiProcesso.
-*/
-void 
-HttpServer::RunMultiProcessed(bool verbose) {
-    pid_t pid;
-    pair<int, string> client;
-    int actualConnection;
+    cout << " THREADED " << endl;
+    server.setMaxThreads(numberThreads);
+    RunMultiThreaded(verbose);
+    cout << "numero de threads "<< numberThreads << endl;        
     
-    if (verbose) {
-        cout << "Server inicializando...\n\n";
-        cout << "Portal atual: " << server.getPortNumber() << endl;
-    }
-
-    // Evento de loop.
-    while (running) {
-
-        // Aguarda por uma conexao.
-        client = server.Connect();
-        actualConnection = client.first;
-
-        if (actualConnection > 0) {
-            // Executa fork de um novo processo filho p/ receber a conexao cliente.
-            pid = fork();
-            if (pid < 0) {
-                perror("Http Server: Fail to fork child.");
-                continue;
-            } else if (pid == 0) {
-                // Processo filho
-                DispatchRequestToChild(verbose, client);
-            } else {
-                // Voltando p/ processo pai. Finaliza a conexao.
-                server.Close(actualConnection);
-            }
-        }
-        
-        // processo fica em stand-by
-        usleep(SLEEP_MSEC);
-    }
-    if (verbose) {
-        cout << "Servidor desligando\n";
-    }
 }
 
-
-
-/*Despacha a requisicao pro processo filho.*/
-void 
-HttpServer::DispatchRequestToChild(bool verbose, pair<int, string> client) {
-    HttpRequest request;
-    string response;
-    time_t begin, end; // definicao de tmepo da requisicao.
-    int actualConnection = client.first;
-
-    // Finaliza processo quando o tempo passado excede o tempo limite
-    time(&begin);    time(&end);
-    elapsedtime = difftime(end, begin);
-
-    do {
-        if (server.Receive(verbose, client)) { 
-            // Recebe request e envia resposta.
-            ParseRequest(request, verbose, server.get_buffer());
-            response = HandleRequest(request, verbose);
-            server.SendResponse(response, actualConnection);
-        }
-        // Calcula o tempo passado.
-        time(&end);
-        elapsedtime = difftime(end, begin);
-    } while (elapsedtime < TIME_OUT);
-
-    // Fecha conexao e finaliza o processo.
-    server.Close(actualConnection);
-    exit(EXIT_SUCCESS);
-}
 
 void 
 HttpServer::RunMultiThreaded(bool verbose) {
@@ -404,6 +324,8 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
     // Mantem uma copia da requisicao original
     string copy = recvbuf;
 
+    cout << "REQUISICAO DO CLIENTE " << copy << endl;
+
     // Capta o metodo da requisicao.
     while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
         buffer += recvbuf[i];
@@ -415,6 +337,7 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
     method = GetMethod(buffer);
     if (verbose && method == INVALID_METHOD) {
         cout << "Metodo HTTP nao reconhecido.\n";
+        return;
     }
 
     // captar URI (endereco de arquivo.)
@@ -422,10 +345,10 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
         uri += recvbuf[i];
         i++;
     }
-    path = DIRECTORY;
+    
 
     // parsear a url recebida e remover caracteres especiais.
-    ParseUri(uri, path, query, type);
+    ParseUri(uri, path, query, type, hostName);
     i++; 
     if (verbose && path.length() > URI_MAX_LENGTH) {
         cout << "Requisicao muito longa.\n";
@@ -527,19 +450,14 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
     
     cout << "PATH ==> " << path << endl;
 
-    if (IsDirectory(path)) {
-        body = CreateIndexHtml(path);
-    }
-    else {
-        
         // Abre o arquivo.
-        file.open(path, fstream::in);
+        /*file.open(path, fstream::in);
         if (!file.good()) {
             perror("Server Error: Fail to open file.");
             status = NOT_FOUND;
-        }
+        }*/
 
-        if (method == GET && status == OK) {           
+    /*    if (method == GET && status == OK) {           
                 
                 // parsea todos os caracteres do arquivo
                 c = file.get();
@@ -550,124 +468,12 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
                 }           
         }
         file.close();        
-    }
+    
 
-    response = CreateResponseString(request, response, body, status);
+    response = CreateResponseString(request, response, body, status);*/
 
     return response;
 }
-
-bool
-HttpServer::IsDirectory(const string path)
-{
-    struct stat s;
-    if (stat(path.c_str(), &s) == 0)
-        if (s.st_mode & S_IFDIR)
-            return true;
-    
-    return false;
-}
-
-string
-HttpServer::CreateIndexHtml(const string path)
-{
-
-    string   response = "<!doctype html><html><head>";
-            response += "<title>Index of /" + path  + "</title>";
-            response += "</head><body>";
-            response += "<h1>Index of " + path + "</h1>";
-            response += CreateIndexList(path);
-            response += "</body>";
-            response += "</html> ";
-
-    return response;
-
-}
-
-string
-HttpServer::CreateIndexList(const string actualFullPath)
-{
-
-    // Get Files and Directories
-    DIR *dirObj;
-    struct dirent *node;
-
-    dirObj = opendir(actualFullPath.c_str());
-
-    vector<string> files;
-    vector<string> directories;
-
-    // leia o diretorio inteiro.
-    if (dirObj != NULL)
-    {
-        while( (node = readdir(dirObj)) ) {
-            if (node->d_type == IS_FILE_FLAG) {
-                files.push_back( string(node->d_name) );
-            }
-            else {
-                directories.push_back( string(node->d_name) );
-            }
-        }
-    }
-    
-    // fecha a pasta.
-    closedir(dirObj);
-
-    // remove os links de recursao.
-    directories.erase( std::remove(directories.begin(), directories.end(), string(".")), directories.end() );
-
-    // ordena os arquivos pelo nome
-    sort(files.begin(), files.end());
-    // ordena os diretorios pelo nome
-    sort(directories.begin(), directories.end());
-
-    // prepara a resposta.
-    string response;
-    string fileFormatted = "";
-    string dirName = "";
-
-    // remove o "www" do caminho..
-    string urlPath = regex_replace(actualFullPath, regex("\\www"), "");
-
-    // remove o ultimo caractere nulo.
-    if (urlPath.back() == '\0') {
-        urlPath.pop_back();
-    }
-
-    // adiciona as pastas na lista
-    for (string dir : directories)
-    {
-        // adiciona barra no final p/ navegar entre as pastas.
-        if (urlPath.back() != '/') {
-            urlPath = urlPath + "/";
-        }
-
-        // renomear links ".."
-        if (dir.compare("..") == 0) {
-           fileFormatted = urlPath + "../";
-           dirName = "Parent directory";
-        }
-        else {
-            dirName = dir;
-            fileFormatted = urlPath + dir;
-        }
-
-        response += "<a href='" + fileFormatted + "'>"+ dirName + "</a><br/>\n";
-    }
-    
-    response += "<ul>"; 
-    for (string file : files)
-    {
-        response += "<li>";
-        fileFormatted = urlPath + file;
-        response += "<a href='" + fileFormatted + "'>"+ file + "</a>\n";
-        response += "</li>";
-    }
-    response += "</ul>";
-
-    return response;
-}
-
 
 // Criar response string.
 string 
@@ -716,6 +522,9 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
 
 http_method_t 
 HttpServer::GetMethod(const string method) {
+
+    cout << "Parseando metodo " << method << endl;
+
     if (method.compare("GET") == 0) {
         return GET;
     } 
@@ -752,14 +561,38 @@ HttpServer::GetMimeType(string extension) {
 }
 
 void 
-HttpServer::ParseUri(string& uri, string& path, string& query, string& type) {
+HttpServer::ParseUri(string& uri, string& path, string& query, string& type, string &hostName) {
     int relpath = uri.find(PREVDIR);
+    int protocolIndex = uri.find("://");
     int length;
     int i = 0;
     string hex = "";
     string extension = "";
+    string tmpProtocol = "";
+    string tmphostName;
     char c;
 
+
+    if (protocolIndex != (int) string::npos) {
+        tmpProtocol = uri.substr(0, protocolIndex);
+        tmphostName = uri.substr(protocolIndex, uri.length());
+        cout << "Protocolo requisitado " << tmpProtocol << endl;
+        
+        if (! (tmpProtocol.compare("http") == 0 || tmpProtocol.compare("https") ) ) {
+            perror("Protocolo invalido!");            
+        }
+
+    }
+    
+    int firstBackslash = hostName.find("/");
+
+    if (firstBackslash != (int) string::npos) {
+        hostName = tmphostName.substr(protocolIndex, firstBackslash);
+        cout << "Host solicitado: " << hostName << endl;
+    }
+
+    // indice dos ":"
+    
     //Remove caracteres, verificando do tipo "/.."
 
     while (relpath != (int) string::npos) {
