@@ -21,6 +21,7 @@ using namespace std;
 #define BACKLOG        128 // limite maximo 
 #define HDR_DELIMETER   ": "
 #define HDR_ENDLINE     "\r\n"
+#define HDR_ENDLINE_INVERT "\n\r"
 
 
 enum tipoServidor {

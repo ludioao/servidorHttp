@@ -87,6 +87,8 @@ class HttpServer {
 
         string downloadFile(string hostName, string uri, int port);        
 
+        void removeHeaderFromContent(string &content);
+
 };
 
 

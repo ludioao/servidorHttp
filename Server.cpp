@@ -373,15 +373,15 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
     if (verbose && version == INVALID_VERSION) {
         cout << "Versao do HTTP invalida..\n";
     }
-
+    console_log("uri selected => " + uri);
     console_log("Method: " + method);
     console_log("version: " + version);
     console_log("copy: " + copy);
-    console_log("path: " + path);
+    console_log("\n\n\n\n\npath: " + path + "\n\n\n\n\n");
     console_log("query: " + query);
     console_log("hostname: " + hostName);
     console_log("port: " + port);
-    
+    path = uri;
 
     // Preenche a struct de request.
     request.Initialize(method, version, copy, path, query, type, hostName, port);
@@ -472,21 +472,58 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
     if (method == GET && status == OK) 
     {
 
-    }
-
-    
     string host = request.get_host_name();
 
     cout << "Calling for host: " << host << endl;
 
-    string teste = downloadFile(host, "/", 80);
+    string teste = downloadFile(host, path, request.get_port());
     body = teste.c_str();
     response = CreateResponseString(request, response, body, status);
+
+
+    }
+
+    
 
     return response;
 }
 
 /*https://raw.githubusercontent.com/ludioao/sisloc/master/README.md*/
+void
+HttpServer::removeHeaderFromContent(string &content)
+{
+       char c;
+       int flagFound = 0,
+            offset = 0,
+            pointer = 0;
+        
+       char * buffer = new char[content.length() + 1];
+
+       std::strcpy(buffer, content.c_str());
+        
+       while(1){
+             if(buffer[pointer]=='\r'&&buffer[pointer+1]=='\n'&&buffer[pointer+2]=='\r'&&buffer[pointer+3]=='\n'){
+                  printf("FOUND header end\n");
+                  break;
+             }
+            pointer++;
+       }
+       
+       offset++;
+
+       content = content.substr(pointer, content.length());
+       /*pointer=pointer+4;
+    
+       char * newBuff = new char[content.length() + 1];//newBuff[2048];
+       
+       memset(newBuff, 0, sizeof(newBuff));
+       memcpy(newBuff, buffer+pointer, x-pointer);
+*/
+       
+
+}
+
+
 
 string
 HttpServer::downloadFile(string hostName, string uri, int port)
@@ -512,6 +549,11 @@ HttpServer::downloadFile(string hostName, string uri, int port)
     request_data.append("close");
     request_data.append(HDR_ENDLINE);
     request_data.append(HDR_ENDLINE);
+
+    /*for (auto head : headers)
+    {
+
+    }*/
             
     console_log("Sending data to server...");
     console_log(request_data);
@@ -522,7 +564,35 @@ HttpServer::downloadFile(string hostName, string uri, int port)
      
     //receive and echo reply
     console_log("----------------------------\n\n");
-    response = c.receiveFromHost( );
+    string tmp_response = c.receiveFromHost( );
+
+    removeHeaderFromContent(tmp_response);
+    response = tmp_response;
+
+/*
+    int indexNewLines = tmp_response.find(HDR_ENDLINE_INVERT);
+    if (indexNewLines != (int) string::npos)
+    {
+        console_log("achei a bagaca " + indexNewLines );
+        response = tmp_response.substr(indexNewLines, response.length());
+        
+        console_log("new response");
+        console_log(response);
+
+    }
+    else {
+        response = tmp_response;
+    }
+*/
+    // debug
+    int value = -1;
+    for(int i = 0; i < response.length(); i++) 
+    {
+        value = response.at(i);
+        cout << response.at(i) << " ==> " << value << endl; 
+        //console_log(response.at(i));
+    }
+
     console_log("\n\n----------------------------\n\n");  
 
     return response;
@@ -622,6 +692,7 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type, str
     string tmpProtocol = "";
     string tmphostName;
     string tmpPort = "";
+    string tmpUri = "";
     char c;
 
 
@@ -631,6 +702,7 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type, str
         tmpProtocol = uri.substr(0, protocolIndex);
         tmphostName = uri.substr(protocolIndex + 3, uri.length());
         console_log("Temphostname is " + tmphostName);
+
         cout << "Protocolo requisitado " << tmpProtocol << endl;        
         if (! (tmpProtocol.compare("http") == 0 || tmpProtocol.compare("https") ) ) {
             perror("Protocolo invalido!");            
@@ -642,6 +714,9 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type, str
     
     if (firstBackslash != (int) string::npos) {
         hostName = tmphostName.substr(0, firstBackslash);
+
+        tmpUri = tmphostName.substr(firstBackslash, tmphostName.length());
+        uri = tmpUri;
         
         // Verifica se tem porta passada explicitamente.
         int portIndex = hostName.find(":");
@@ -661,7 +736,6 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type, str
     // indice dos ":"
     
     //Remove caracteres, verificando do tipo "/.."
-
     while (relpath != (int) string::npos) {
         uri.erase(relpath, strlen(PREVDIR));
         relpath = uri.find(PREVDIR);
@@ -709,6 +783,9 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type, str
         extension += path[i];
         i++;
     }
+
+
+
 
     // Interpreta o mimetype usando a extensao
     type = GetMimeType(extension);
@@ -788,12 +865,6 @@ void HttpRequest::Reset() {
 }
 
 HttpRequest::~HttpRequest() {}
-
-
-
-
-
-
 
 
 
