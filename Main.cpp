@@ -13,9 +13,11 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <stdlib.h>
+#include "Cache.h"
 #include "SocketServer.h"
 #include "HttpServer.h"
 #include "HttpRequest.h"
+
 
 
 using namespace std;
@@ -29,24 +31,14 @@ int main(int argc, char* argv[])
 
     long int runPort = PORT;
 
-    int 
-            numberofThreads = 2,
-            argPort = -1,
-            argThread = -1;
-
-
     if (argc > 1) {
-
-            argPort = 2;
-            argThread = 1;
-            numberofThreads = atoi(argv[argThread]);
-            if (argc > 2) 
-                runPort = atoi(argv[argPort]);        
+            runPort = atoi(argv[1]);
+            // cacheSize = atoi(argv[2]);
     }
 
     HttpServer HttpdObj;
 
-    HttpdObj.Start(showLog, runPort, numberofThreads);
+    HttpdObj.Start(showLog, runPort);
     
     return 0;
 }

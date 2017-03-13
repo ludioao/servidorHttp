@@ -20,6 +20,7 @@
 #include <pthread.h>
 #include "SocketServer.h"
 #include "HttpRequest.h"
+#include "Cache.h"
 
 #define ACCEPT_RANGES  "Accept-Ranges: "
 #define BYTES          "bytes"
@@ -35,7 +36,8 @@ class HttpServer {
     private: 
 
         SocketServer server;
-        vector<pair<HttpRequest*, string> > cache;
+        CacheService cache;
+        //vector<pair<HttpRequest*, string> > cache;
         double elapsedtime;
         pthread_attr_t attr;
         //pthread_mutex_t cachemutex;
@@ -52,7 +54,7 @@ class HttpServer {
         void InitMimeTypes();
 
         // Metodos p/ trabalhar com requisicoes multi-processos.
-        void Start( bool verbose, long int portNumber, int);
+        void Start( bool verbose, long int portNumber);
         
         // Metodos p/ trbalhar com threads.
         void RunMultiThreaded(bool verbose);

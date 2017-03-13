@@ -25,25 +25,26 @@ Arquivo principal do servidor HTTP.
 #include <unistd.h>
 #include <fstream>
 #include <string>
-
+#include "Functions.h"
 #include "HttpRequest.h"
 #include "HttpServer.h"
 
 using namespace std;
 
-static bool running = true;
 
 const unsigned char IS_FILE_FLAG = 0x8;
 
-void console_log(const string text)
-{
-    cout << text << endl;
-}
+
+
+static bool running = true;
 
 /*
     Helper para Controle de Signals.
 */
 void handleSigint(int signum) {
+    #ifdef DEBUG_THREAD
+        console_log("Signal is " + signum);
+    #endif        
     // Finaliza o loop.
     running = false;
 }
@@ -51,6 +52,9 @@ void handleSigint(int signum) {
 void handleSigchld(int signum) {
     // Previne processos zombies.
     int status;
+    #ifdef DEBUG_THREAD
+        console_log("Signal is " + signum);
+    #endif
     while (waitpid(-1, &status, WNOHANG) == 0);
 }
 
@@ -75,6 +79,9 @@ char hexToAscii(string hex) {
     ascii += num;
     return (char) ascii;
 }
+
+
+
 
 
 // Construtor do HttpServer.
@@ -172,7 +179,7 @@ Port_Operacao => Porta para iniciar Operacao;
 numberThreads => Quando o tipo de servidor eh Multithread. Entao utiliza-se o numero de threads fixo.
 */
 void 
-HttpServer::Start(bool verbose, long int port_Operacao, int numberThreads) {
+HttpServer::Start(bool verbose, long int port_Operacao) {
     
     signal(SIGINT, handleSigint); // Envia sinal de inicializacao. 
     signal(SIGCHLD, handleSigchld); // Envia sinal p/ processo filho.
@@ -186,7 +193,7 @@ HttpServer::Start(bool verbose, long int port_Operacao, int numberThreads) {
     console_log("Inicializando servidor na porta " + actualPortNumber);
     
     // Recebe o tipo de arquivo.
-    server.setMaxThreads(numberThreads);
+    //server.setMaxThreads(numberThreads);
     RunMultiThreaded(verbose);    
 }
 
@@ -472,15 +479,38 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
     if (method == GET && status == OK) 
     {
 
-    string host = request.get_host_name();
+        string host = request.get_host_name();
 
-    cout << "Calling for host: " << host << endl;
+        cout << "Calling for host: " << host << endl;
 
-    string teste = downloadFile(host, path, request.get_port());
-    body = teste.c_str();
-    response = CreateResponseString(request, response, body, status);
+        string teste = downloadFile(host, path, request.get_port());
 
+        body = teste.c_str();
+        response = CreateResponseString(request, response, body, status);
 
+        string cacheUrl = host + path;
+        console_log("URL is " + cacheUrl);
+
+        unsigned long int index = MAX_NUMBER;
+        // Retrieve from cache.
+        if (cache.getCacheIndex(cacheUrl) != MAX_NUMBER)
+        {
+            string tmp_response = cache.getCacheDataByIndex(index);
+
+            console_log("retrieved from cache");
+            console_log(tmp_response);
+            console_log("end retrieved from cache");
+
+            //removeHeaderFromContent(tmp_response);
+            //response = tmp_response;
+        }
+        else 
+        {
+            // Save to Cache    
+            console_log("Saving to cache...");
+            Cache* temporaryCache = new Cache(host + path, response, 1024);
+            cache.storeCache(temporaryCache);
+        }    
     }
 
     
@@ -492,8 +522,8 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
 void
 HttpServer::removeHeaderFromContent(string &content)
 {
-       char c;
-       int flagFound = 0,
+       //char c;
+       int //flagFound = 0,
             offset = 0,
             pointer = 0;
         
@@ -569,6 +599,9 @@ HttpServer::downloadFile(string hostName, string uri, int port)
     removeHeaderFromContent(tmp_response);
     response = tmp_response;
 
+
+
+
 /*
     int indexNewLines = tmp_response.find(HDR_ENDLINE_INVERT);
     if (indexNewLines != (int) string::npos)
@@ -585,15 +618,15 @@ HttpServer::downloadFile(string hostName, string uri, int port)
     }
 */
     // debug
-    int value = -1;
-    for(int i = 0; i < response.length(); i++) 
+  /*  int value = -1;
+    for(unsigned int i = 0; i < response.length(); i++) 
     {
         value = response.at(i);
         cout << response.at(i) << " ==> " << value << endl; 
         //console_log(response.at(i));
     }
 
-    console_log("\n\n----------------------------\n\n");  
+    console_log("\n\n----------------------------\n\n");  */
 
     return response;
 
@@ -911,7 +944,7 @@ bool ClientSocket::connectToHost(string address , int port)
             //gethostbyname failed
             herror("gethostbyname");
             console_log("Failed to resolve hostname");
-            //return  
+            return false;
         }
          
         //Cast the h_addr_list to in_addr , since h_addr_list also has the ip address in long format only
