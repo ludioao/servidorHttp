@@ -1,17 +1,8 @@
 HTTP/1.1 200 OK
 Accept-Ranges: bytes
 Content-Type: unknown
-Content-Length: 312
-Date: Sun Mar 12 23:48:39 2017
+Content-Length: 3
+Date: Mon Mar 13 20:19:40 2017
 
 
 
-<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
-<html><head>
-<title>301 Moved Permanently</title>
-</head><body>
-<h1>Moved Permanently</h1>
-<p>The document has moved <a href="https://proece.ufms.br/">here</a>.</p>
-<hr>
-<address>Apache/2.4.7 (Ubuntu) Server at preae.ufms.br Port 80</address>
-</body></html>

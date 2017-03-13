@@ -478,34 +478,28 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
     // check if is in cache service.
     if (method == GET && status == OK) 
     {
-
+        // get host name
         string host = request.get_host_name();
 
+        // call for host.
         cout << "Calling for host: " << host << endl;
 
-        string teste = downloadFile(host, path, request.get_port());
-
-        body = teste.c_str();
-        response = CreateResponseString(request, response, body, status);
-
+        // cache url.
         string cacheUrl = host + path;
         console_log("URL is " + cacheUrl);
 
-        unsigned long int index = MAX_NUMBER;
+        unsigned long int index = cache.getCacheIndex(cacheUrl);
         // Retrieve from cache.
-        if (cache.getCacheIndex(cacheUrl) != MAX_NUMBER)
+        if (index != MAX_NUMBER)
         {
-            string tmp_response = cache.getCacheDataByIndex(index);
-
-            console_log("retrieved from cache");
-            console_log(tmp_response);
-            console_log("end retrieved from cache");
-
-            //removeHeaderFromContent(tmp_response);
-            //response = tmp_response;
+            response = cache.getCacheDataByIndex(index);
+            removeHeaderFromContent(response);
         }
         else 
         {
+            string fileContentRemote = downloadFile(host, path, request.get_port());
+            body = fileContentRemote.c_str();
+            response = CreateResponseString(request, response, body, status);
             // Save to Cache    
             console_log("Saving to cache...");
             Cache* temporaryCache = new Cache(host + path, response, 1024);
@@ -513,12 +507,9 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
         }    
     }
 
-    
-
     return response;
 }
 
-/*https://raw.githubusercontent.com/ludioao/sisloc/master/README.md*/
 void
 HttpServer::removeHeaderFromContent(string &content)
 {
@@ -542,14 +533,6 @@ HttpServer::removeHeaderFromContent(string &content)
        offset++;
 
        content = content.substr(pointer, content.length());
-       /*pointer=pointer+4;
-    
-       char * newBuff = new char[content.length() + 1];//newBuff[2048];
-       
-       memset(newBuff, 0, sizeof(newBuff));
-       memcpy(newBuff, buffer+pointer, x-pointer);
-*/
-       
 
 }
 
@@ -596,6 +579,16 @@ HttpServer::downloadFile(string hostName, string uri, int port)
     console_log("----------------------------\n\n");
     string tmp_response = c.receiveFromHost( );
 
+    int value = -1;
+    for(unsigned int i = 0; i < response.length(); i++) 
+    {
+        value = response.at(i);
+        cout << response.at(i) << " ==> " << value << endl; 
+        //console_log(response.at(i));
+    }
+
+    console_log("\n\n----------------------------\n\n");  
+
     removeHeaderFromContent(tmp_response);
     response = tmp_response;
 
@@ -618,15 +611,6 @@ HttpServer::downloadFile(string hostName, string uri, int port)
     }
 */
     // debug
-  /*  int value = -1;
-    for(unsigned int i = 0; i < response.length(); i++) 
-    {
-        value = response.at(i);
-        cout << response.at(i) << " ==> " << value << endl; 
-        //console_log(response.at(i));
-    }
-
-    console_log("\n\n----------------------------\n\n");  */
 
     return response;
 

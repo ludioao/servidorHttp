@@ -63,17 +63,20 @@ CacheService::storeCache(Cache* cacheable)
 unsigned long int
 CacheService::getCacheIndex(string url)
 {
-
+    unsigned long int index = MAX_NUMBER;
     for (unsigned int i = 0; i < cacheList.size(); i++)
     {   
         if (cacheList[i]->getUrl().compare(url) == 0) 
         {
             cout << "found at " << i << endl;
-            return i;
+            index = cacheList[i]->getNumber();
+            break;
         }
     }
     
-    return MAX_NUMBER;
+    cout << "index is " << index << endl;
+
+    return index;
 }
 
 string
