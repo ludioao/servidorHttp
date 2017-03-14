@@ -38,6 +38,15 @@ const unsigned char IS_FILE_FLAG = 0x8;
 
 static bool running = true;
 
+
+// trim from start
+static inline std::string &ltrim(std::string &s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(),
+            std::not1(std::ptr_fun<int, int>(std::isspace))));
+    return s;
+}
+
+
 /*
     Helper para Controle de Signals.
 */
@@ -286,6 +295,9 @@ HttpServer::DispatchRequestToThread(bool verbose, pair<int, string> client) {
             // Recebe a requisicao e responde.
             ParseRequest(*request, verbose, server.get_buffer());
 
+            if (request->get_invalid() == true)
+                break;
+
             // Trava a mutex antes de chama-lo.
             response = getThreadRequest(*request, verbose);
             server.SendResponse(response, actualConnection);
@@ -347,9 +359,11 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
     method = GetMethod(buffer);
     if (verbose && method == INVALID_METHOD) {
         cout << "Metodo HTTP nao reconhecido.\n";
+        request.set_invalid(true);
         return;
     }
     else {
+            
             // captar URI (endereco de arquivo.)
             while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
                 uri += recvbuf[i];
@@ -380,6 +394,8 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
             version = GetVersion(buffer);
             if (verbose && version == INVALID_VERSION) {
                 cout << "Versao do HTTP invalida..\n";
+                request.set_invalid(true);
+                return;
             }
             console_log("server requested.....");
             console_log("uri selected => " + uri);
@@ -468,6 +484,8 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
     string type = request.get_content_type();
     string copy = request.get_copy();
     string response = "";
+
+    Cache* itemCache;
     
     // stat, usado p/ verificar se o arquivo eh uma pasta e mostrar a lista de arquivos.
 
@@ -502,18 +520,35 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
         // Retrieve from cache.
         if (index != MAX_NUMBER)
         {
-            response = cache.getCacheDataByIndex(index);
-            removeHeaderFromContent(request, response);
+            body = cache.getCacheDataByIndex(index);
+            itemCache = cache.getCacheItem(index);
+            response = CreateResponseString(request, response, body, status, itemCache);
+
+            //removeHeaderFromContent(request, response);
         }
         else 
         {
+            // Download and get file!!!!
             string fileContentRemote = downloadFile(request, host, path, request.get_port());
             body = fileContentRemote.c_str();
-            response = CreateResponseString(request, response, body, status);
+            ltrim(body);
+            
+            //removeHeaderFromContent()
+            
             // Save to Cache    
             console_log("Saving to cache...");
-            Cache* temporaryCache = new Cache(host + path, response, 1024);
+            
+            removeHeaderFromContent(request, body);
+
+            ltrim(body);
+
+            Cache* temporaryCache = new Cache(host + path, body, 1024);
+            temporaryCache->add_headers( request.get_headers() );
             cache.storeCache(temporaryCache);
+            
+            temporaryCache->print_headers();
+
+            response = CreateResponseString(request, response, body, status, temporaryCache);
         }    
     }
 
@@ -531,9 +566,10 @@ HttpServer::removeHeaderFromContent(HttpRequest &request, string &content)
 
             content = content.substr(pointer, content.length());
         }
+        
+        
 
-
-        request.printHeaders();
+        //request.printHeaders();
 }
 
 
@@ -580,7 +616,7 @@ HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int 
     response = c.receiveFromHost( );
 
     // get headers and remove from content.
-    removeHeaderFromContent(request, response);
+    //removeHeaderFromContent(request, response);
 
     return response;
 
@@ -588,17 +624,13 @@ HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int 
 
 // Criar response string.
 string 
-HttpServer::CreateResponseString(HttpRequest request, string response, string body, http_status_t status) {
+HttpServer::CreateResponseString(HttpRequest request, string response, string body, http_status_t status, const Cache* item) {
     
     time_t now;
     struct tm* gmnow;
-
-    //int contentlen = body.length() == 0 ? 0 : body.length() - 1;
+    
+    int contentlen = body.length() == 0 ? 0 : body.length() - 1;
     http_method_t method = request.get_method();
-    string type = request.get_content_type();
-
-    console_log("response to "  + type);
-
 
     // Cria uma nova resposta.
     string newresponse = response;
@@ -608,39 +640,34 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
     gmnow = gmtime(&now);
 
     // prepara resposta
-    /*newresponse += HTTPSERVER_VERSION;
-    newresponse += SPACE;
-    newresponse += statuses[status];
-    newresponse += CRLF;*/
-
     // Este programa esta apenas funcionando com metodos GET.
     if (status == OK && method == GET) {
-
-        
-          for(auto head : request.get_headers())
+          for(auto head : item->headers)
           {
-              newresponse += head->name + ": ";
-              newresponse += head->value;
-              newresponse += CRLF;
+              if (head->name.compare("Content-Length") == 0) continue;
+              if (head->name.compare("Date") == 0) continue;
+              if (head->value.length() == 0)
+              {
+                  newresponse += head->name;
+                  newresponse += CRLF;
+              }
+              else {
+                  newresponse += head->name + ": ";
+                  //ltrim(head->value);
+                  newresponse += head->value;
+                  newresponse += CRLF;
+              }
+              
           }
-        /*newresponse += ACCEPT_RANGES;
-        newresponse += BYTES;
-        newresponse += CRLF;
-        newresponse += CONTENT_TYPE;
-        newresponse += type;
-        newresponse += CRLF;
-        newresponse += CONTENT_LENGTH;
-        newresponse += std::to_string(contentlen);
-        newresponse += CRLF;*/
-
-        
-
-
     }
-    // adiciona hora e resposta.
-    /*newresponse += DATE;
+
+
+    newresponse += CONTENT_LENGTH;
+    newresponse += std::to_string(contentlen);
+    newresponse += CRLF;
+    newresponse += DATE;
     newresponse += asctime(gmnow);
-    newresponse += CRLF;*/
+    newresponse += CRLF;
     newresponse += body;
     return newresponse;
 }
@@ -812,6 +839,7 @@ void HttpRequest::Initialize(http_method_t method, http_version_t version, strin
     this->type = type;
     this->host_name = hostName;
     this->port = port;
+    this->invalid = false;
 }
 
 void HttpRequest::ParseHeaders(const char* buffer, int index) {
@@ -819,7 +847,11 @@ void HttpRequest::ParseHeaders(const char* buffer, int index) {
     int length = strlen(buffer);
     string name = "";
     string value = "";
+    int asciiN;
+    
     const Header* header;
+
+    int iteraction = -1;
 
     while (i <= length) {
         // Pega o nome do cabecalho.
@@ -838,15 +870,37 @@ void HttpRequest::ParseHeaders(const char* buffer, int index) {
         // pula os caracteres \r\n
         i += 2;
         
+    
         // adiciona a nova struct de header.
         if (!isspace(name.c_str()[0])) {
-            // if (name.compare("Date") == 0) {
 
-            // }
-            // else {
-                header = new Header(name, value);
-                headers.push_back(header);
-            // }            
+                // parser do primeiro...
+                if (++iteraction == 0) {
+                    // get first \n
+                    asciiN = name.find("\n");
+                    string headReply = name.substr(0, asciiN);
+                    header = new Header(headReply, "");
+                    headers.push_back(header);
+                    
+                    console_log("headreply is " + headReply);
+
+                    // get date.
+                    string dateReply = name.substr(asciiN, name.length());
+
+                    int dateHeadIndex = dateReply.find(":");
+                    if (dateHeadIndex != (int) string::npos) {
+                        string dateHead = dateReply.substr(0, dateHeadIndex);
+                        string dateValue = dateReply.substr(dateHeadIndex, dateReply.length());
+                        
+                        header = new Header(dateHead, dateValue);
+                        headers.push_back(header);
+                    }
+                }
+                else {                  
+                        header = new Header(name, value);
+                        headers.push_back(header);
+                }
+       
         }
         
         // Limpa os campos.
@@ -876,10 +930,10 @@ void
 HttpRequest::printHeaders()
 {
 
-            for(auto head : headers)
+            /*for(auto head : headers)
             {
                console_log("header addiciotnal " + head->name + " value "  + head->value);           
-            }
+            }*/
 }
 
 
@@ -987,27 +1041,13 @@ string ClientSocket::receiveFromHost()
     
     char buffer[BUFFER_LENGTH];
     memset( buffer, '\0', sizeof(char)*BUFFER_LENGTH );
-    string reply;
-     
-    //Receive a reply from the server
-    /*if( recv(sock , buffer , sizeof(buffer) , 0) < 0)
-    {
-        puts("recv failed");
-    }
-
-     
-    reply = buffer;
-*/
+    string reply = "";
+  
     while (recv(sock, buffer, sizeof(buffer) + 1, 0))
     {
-        reply = reply + buffer;
+        reply += buffer;
         memset( buffer, '\0', sizeof(char)*BUFFER_LENGTH );
     }
-
-  //  console_log("REPLY----");
-//    console_log(reply);
-    //console_log("REPLY----");
-    
 
     return reply;
 }

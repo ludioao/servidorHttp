@@ -9,9 +9,11 @@ using namespace std;
 #define MAX_NUMBER 10101010
 
 class Cache {
+    
+    //private:
+
     public:
-        Cache();
-        Cache(string, string, unsigned long long int);
+        vector<const Header*> headers;
         string Data;
         unsigned long long int Size;
         //string Path;
@@ -19,7 +21,16 @@ class Cache {
         //string HostName;
         clock_t UsageTime;
         unsigned long int fileNumber;
+        string HeadResponse;
 
+        Cache();
+        Cache(string, string, unsigned long long int);
+
+        // void set_headresponse(string val){ HeadResponse = val };
+        // void get_headresponse() { return HeadResponse };
+        void add_headers(vector<const Header*>);           
+        void print_headers(); 
+        vector<const Header*> get_headers() { return headers; }
         void setNumber(const unsigned long int val) { fileNumber = val; };
         unsigned long int getNumber() { return fileNumber; };
         string getData() { return Data; };
@@ -35,10 +46,13 @@ class CacheService {
         vector<Cache*> cacheList;
 
     public:
+
         // ... Cache search
         Cache getCache(string, string);        
 
         string getCacheDataByIndex(int i);
+
+        Cache* getCacheItem(int i);
 
         string getCachePath(unsigned long int cacheNumber);
 

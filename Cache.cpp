@@ -1,6 +1,7 @@
 #include <iostream>
 #include <time.h>
 #include <fstream>
+#include "HttpRequest.h"
 #include "Cache.h"
 
 
@@ -96,4 +97,35 @@ CacheService::getCacheDataByIndex(int i)
     }  
 
     return file_contents;
+}
+
+Cache* 
+CacheService::getCacheItem(int i)
+{
+    return cacheList[i];
+}
+
+
+
+void 
+Cache::add_headers(vector<const Header*> myHeaders)
+{
+    headers = myHeaders;
+    // while(!myHeaders.empty()) {
+    //     headers.push_back(myHeaders.back());
+    //     delete myHeaders.back();
+    //     myHeaders.pop_back();
+    // }
+}            
+
+
+void
+Cache::print_headers()
+{
+    for(auto head : headers)
+    {
+        cout << "Cacheable Header ["   
+             << head->name << ": " << head->value + "]" 
+             << endl;           
+    }
 }
