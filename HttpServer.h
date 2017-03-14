@@ -87,9 +87,9 @@ class HttpServer {
         void downloadFileRemote();
         void serveFromCache();
 
-        string downloadFile(string hostName, string uri, int port);        
+        string downloadFile(HttpRequest &, string hostName, string uri, int port);        
 
-        void removeHeaderFromContent(string &content);
+        void removeHeaderFromContent(HttpRequest &, string &content);
 
 };
 

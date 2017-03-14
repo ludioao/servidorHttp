@@ -74,6 +74,7 @@ class HttpRequest {
         string query;
         string type;
         string host_name;
+        bool invalid;
         int port;
         bool toolong;
         
@@ -103,6 +104,7 @@ class HttpRequest {
         string get_query() { return query; }
         string get_content_type() { return type; }
         string get_host_name() { return host_name; };
+        bool get_invalid() { return invalid; };
         int get_port() { return port; };
         bool get_flag() { return toolong; }
 
@@ -114,6 +116,10 @@ class HttpRequest {
         void set_path(string path) { this->path = path; }
         void set_query(string query) { this->query = query; }
         void set_flag(bool value) { toolong = value; }
+        void set_invalid(bool value) { invalid = value; };
+
+        void printHeaders();
+
 };
 
 #endif

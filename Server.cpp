@@ -286,6 +286,9 @@ HttpServer::DispatchRequestToThread(bool verbose, pair<int, string> client) {
             // Recebe a requisicao e responde.
             ParseRequest(*request, verbose, server.get_buffer());
 
+            if (request->get_invalid() == true)
+                break;
+
             // Trava a mutex antes de chama-lo.
             response = getThreadRequest(*request, verbose);
             server.SendResponse(response, actualConnection);
@@ -346,55 +349,60 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
     // Metodo parser.
     method = GetMethod(buffer);
     if (verbose && method == INVALID_METHOD) {
-        cout << "Metodo HTTP nao reconhecido.\n";
-        return;
+        cout << "Method or content not recognized.\n";
+        request.set_invalid(true);
+    }
+    else {
+
+        // captar URI (endereco de arquivo.)
+        while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
+            uri += recvbuf[i];
+            i++;
+        }
+        
+
+        // parsear a url recebida e remover caracteres especiais.
+        cout << "Parseando URI" << endl;
+        ParseUri(uri, path, query, type, hostName, port);
+        i++; 
+        if (verbose && path.length() > URI_MAX_LENGTH) {
+            cout << "Requisicao muito longa.\n";
+        }
+
+        // Get version number
+        buffer = "";
+        while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
+            buffer += recvbuf[i];
+            i++;
+        }
+
+        // pula pra proxima linha
+        while (isspace(recvbuf[i])) 
+            i++;
+        
+        // parsea a versao do http.
+        version = GetVersion(buffer);
+        if (verbose && version == INVALID_VERSION) {
+            cout << "Versao do HTTP invalida..\n";
+        }
+        console_log("server requested.....");
+        console_log("uri selected => " + uri);
+        console_log("Method: " + method);
+        console_log("version: " + version);
+        console_log("copy: " + copy);
+        console_log("path: " + path);
+        console_log("query: " + query);
+        console_log("hostname: " + hostName);
+        console_log("port: " + port);
+        console_log(".............................");
+        path = uri;
+
+        // Preenche a struct de request.
+        request.Initialize(method, version, copy, path, query, type, hostName, port);
+
     }
 
-    // captar URI (endereco de arquivo.)
-    while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
-        uri += recvbuf[i];
-        i++;
-    }
-    
-
-    // parsear a url recebida e remover caracteres especiais.
-    cout << "Parseando URI" << endl;
-    ParseUri(uri, path, query, type, hostName, port);
-    i++; 
-    if (verbose && path.length() > URI_MAX_LENGTH) {
-        cout << "Requisicao muito longa.\n";
-    }
-
-    // Get version number
-    buffer = "";
-    while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
-        buffer += recvbuf[i];
-        i++;
-    }
-
-    // pula pra proxima linha
-    while (isspace(recvbuf[i])) 
-        i++;
-    
-    // parsea a versao do http.
-    version = GetVersion(buffer);
-    if (verbose && version == INVALID_VERSION) {
-        cout << "Versao do HTTP invalida..\n";
-    }
-    console_log("server requested.....");
-    console_log("uri selected => " + uri);
-    console_log("Method: " + method);
-    console_log("version: " + version);
-    console_log("copy: " + copy);
-    console_log("path: " + path);
-    console_log("query: " + query);
-    console_log("hostname: " + hostName);
-    console_log("port: " + port);
-    console_log(".............................");
-    path = uri;
-
-    // Preenche a struct de request.
-    request.Initialize(method, version, copy, path, query, type, hostName, port);
+   
 }
 
 // Wrapper pra receber requisicao do thread.
@@ -415,6 +423,9 @@ HttpServer::HandleRequest(HttpRequest& request, bool verbose) {
     http_version_t version = request.get_version();
     string path = request.get_path();
     string type = request.get_content_type();
+
+    console_log("content type is " + type);
+ 
     string response = "";
     fstream file;
 
@@ -446,10 +457,16 @@ HttpServer::HandleRequest(HttpRequest& request, bool verbose) {
 
     // Send response
     if (verbose) {
+        /*int pointer = response.find("\r\n\r\n");
+        if (pointer != (int) string::npos) {
+            string response_header = response.substr(0, pointer);
+            console_log("header is " + response_header);
+        }*/
         cout << endl << "Response: " << response << endl << endl;
     }
     return response;
 }
+
 
 string 
 HttpServer::HandleGet(HttpRequest request, http_status_t status) {
@@ -495,12 +512,14 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
         // Retrieve from cache.
         if (index != MAX_NUMBER)
         {
-            response = cache.getCacheDataByIndex(index);
-            removeHeaderFromContent(response);
+            string fileContentCache = cache.getCacheDataByIndex(index);
+            body = fileContentCache.c_str();
+            response = CreateResponseString(request, response, body, status);
+            //removeHeaderFromContent(request, response);
         }
         else 
         {
-            string fileContentRemote = downloadFile(host, path, request.get_port());
+            string fileContentRemote = downloadFile(request, host, path, request.get_port());
             body = fileContentRemote.c_str();
             response = CreateResponseString(request, response, body, status);
             // Save to Cache    
@@ -514,12 +533,9 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
 }
 
 void
-HttpServer::removeHeaderFromContent(string &content)
+HttpServer::removeHeaderFromContent(HttpRequest &request, string &content)
 {
-       //char c;
-       int //flagFound = 0,
-            offset = 0,
-            pointer = 0;
+       int  pointer = 0;
         
        char * buffer = new char[content.length() + 1];
 
@@ -527,24 +543,26 @@ HttpServer::removeHeaderFromContent(string &content)
         
        while(1){
              if(buffer[pointer]=='\r'&&buffer[pointer+1]=='\n'&&buffer[pointer+2]=='\r'&&buffer[pointer+3]=='\n'){
-                  printf("FOUND header end\n");
+                  console_log("FOUND header end\n");
                   break;
-             }
+            }
             pointer++;
        }
        
-       offset++;
-
+       string content_header = content.substr(0, pointer);
+       request.ParseHeaders(content_header.c_str(), 0);    
        content = content.substr(pointer, content.length());
-
+       request.printHeaders();
 }
 
 
 
 string
-HttpServer::downloadFile(string hostName, string uri, int port)
+HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int port)
 {
     ClientSocket c;
+
+    string headers = "";
 
     string response = "";
     response.clear();
@@ -576,44 +594,12 @@ HttpServer::downloadFile(string hostName, string uri, int port)
     console_log("");
 
     c.sendDataHost(request_data.c_str());
-
      
     //receive and echo reply
-    console_log("----------------------------\n\n");
-    string tmp_response = c.receiveFromHost( );
+    response = c.receiveFromHost( );
 
-    int value = -1;
-    for(unsigned int i = 0; i < response.length(); i++) 
-    {
-        value = response.at(i);
-        cout << response.at(i) << " ==> " << value << endl; 
-        //console_log(response.at(i));
-    }
-
-    console_log("\n\n----------------------------\n\n");  
-
-    removeHeaderFromContent(tmp_response);
-    response = tmp_response;
-
-
-
-
-/*
-    int indexNewLines = tmp_response.find(HDR_ENDLINE_INVERT);
-    if (indexNewLines != (int) string::npos)
-    {
-        console_log("achei a bagaca " + indexNewLines );
-        response = tmp_response.substr(indexNewLines, response.length());
-        
-        console_log("new response");
-        console_log(response);
-
-    }
-    else {
-        response = tmp_response;
-    }
-*/
-    // debug
+    // get headers and remove from content.
+    //removeHeaderFromContent(request, response);
 
     return response;
 
@@ -626,9 +612,12 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
     time_t now;
     struct tm* gmnow;
 
-    int contentlen = body.length() == 0 ? 0 : body.length() - 1;
+    //int contentlen = body.length() == 0 ? 0 : body.length() - 1;
     http_method_t method = request.get_method();
     string type = request.get_content_type();
+
+    console_log("response to "  + type);
+
 
     // Cria uma nova resposta.
     string newresponse = response;
@@ -638,14 +627,23 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
     gmnow = gmtime(&now);
 
     // prepara resposta
-    newresponse += HTTPSERVER_VERSION;
+    /*newresponse += HTTPSERVER_VERSION;
     newresponse += SPACE;
     newresponse += statuses[status];
-    newresponse += CRLF;
+    newresponse += CRLF;*/
 
     // Este programa esta apenas funcionando com metodos GET.
     if (status == OK && method == GET) {
-        newresponse += ACCEPT_RANGES;
+
+        
+          for(auto head : request.get_headers())
+          {
+              newresponse += head->name + ":";
+              newresponse += SPACE;
+              newresponse += head->value;
+              newresponse += CRLF;
+          }
+        /*newresponse += ACCEPT_RANGES;
         newresponse += BYTES;
         newresponse += CRLF;
         newresponse += CONTENT_TYPE;
@@ -653,7 +651,11 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
         newresponse += CRLF;
         newresponse += CONTENT_LENGTH;
         newresponse += std::to_string(contentlen);
-        newresponse += CRLF;
+        newresponse += CRLF;*/
+
+        
+
+
     }
     // adiciona hora e resposta.
     newresponse += DATE;
@@ -721,10 +723,10 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type, str
     if (protocolIndex != (int) string::npos) {
         tmpProtocol = uri.substr(0, protocolIndex);
         tmphostName = uri.substr(protocolIndex + 3, uri.length());
-        console_log("Temphostname is " + tmphostName);
+        //console_log("Temphostname is " + tmphostName);
 
-        cout << "Protocolo requisitado " << tmpProtocol << endl;        
-        if (! (tmpProtocol.compare("http") == 0 || tmpProtocol.compare("https") ) ) {
+        //cout << "Protocolo requisitado " << tmpProtocol << endl;        
+        if (! (tmpProtocol.compare("http") == 0 ) ) { // || tmpProtocol.compare("https") 
             perror("Protocolo invalido!");            
         }
     }
@@ -742,14 +744,12 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type, str
         int portIndex = hostName.find(":");
         if (portIndex != (int) string::npos) {
             tmpPort = hostName.substr(portIndex + 1, hostName.length());
+            
             port = stoi(tmpPort);
-
-            console_log("Porta explicita " + port);
+            console_log("SERVER PARSER: Currently at port " + port);
 
             hostName = hostName.substr(0, portIndex);
-
-            console_log("host name definido como " + hostName);
-
+            console_log("SERVER PARSER: Hostname is " + hostName);
         }
     }
 
@@ -832,6 +832,7 @@ void HttpRequest::Initialize(http_method_t method, http_version_t version, strin
     this->type = type;
     this->host_name = hostName;
     this->port = port;
+    this->invalid = false;
 }
 
 void HttpRequest::ParseHeaders(const char* buffer, int index) {
@@ -860,8 +861,16 @@ void HttpRequest::ParseHeaders(const char* buffer, int index) {
         
         // adiciona a nova struct de header.
         if (!isspace(name.c_str()[0])) {
-            header = new Header(name, value);
-            headers.push_back(header);
+            if (name.compare("Date") == 0)
+            {
+                console_log("dont save date... we willl generate after");
+                // do nothing
+            } else {
+                console_log("Header parsed: [" + name + "] => " + value);
+                header = new Header(name, value);
+                headers.push_back(header);
+            }
+            
         }
         
         // Limpa os campos.
@@ -886,6 +895,12 @@ void HttpRequest::Reset() {
 
 HttpRequest::~HttpRequest() {}
 
+
+void
+HttpRequest::printHeaders()
+{
+    //
+}
 
 
 /*
@@ -1009,14 +1024,15 @@ string ClientSocket::receiveFromHost()
         memset( buffer, '\0', sizeof(char)*BUFFER_LENGTH );
     }
 
-    console_log("REPLY----");
-    console_log(reply);
-    console_log("REPLY----");
+  //  console_log("REPLY----");
+//    console_log(reply);
+    //console_log("REPLY----");
     
 
     return reply;
 }
  
+
 
 
 
