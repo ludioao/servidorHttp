@@ -136,7 +136,8 @@ HttpServer::InitMimeTypes() {
     MimeTypes["bmp"]    = "image/bmp";
     MimeTypes["gif"]    = "image/gif";
     MimeTypes["jpeg"]   = "image/jpeg";
-    MimeTypes["jpg"]    = "image/jpeg";
+    //MimeTypes["jpg"]    = "image/jpeg";
+    MimeTypes["png"]    = "image/";    
     MimeTypes["tif"]    = "image/tiff";
     MimeTypes["tiff"]   = "image/tiff";
     MimeTypes["xbm"]    = "image/xbm";
@@ -380,14 +381,16 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
     if (verbose && version == INVALID_VERSION) {
         cout << "Versao do HTTP invalida..\n";
     }
+    console_log("server requested.....");
     console_log("uri selected => " + uri);
     console_log("Method: " + method);
     console_log("version: " + version);
     console_log("copy: " + copy);
-    console_log("\n\n\n\n\npath: " + path + "\n\n\n\n\n");
+    console_log("path: " + path);
     console_log("query: " + query);
     console_log("hostname: " + hostName);
     console_log("port: " + port);
+    console_log(".............................");
     path = uri;
 
     // Preenche a struct de request.
@@ -986,17 +989,31 @@ bool ClientSocket::sendDataHost(string data)
 */
 string ClientSocket::receiveFromHost()
 {
+    
     char buffer[BUFFER_LENGTH];
     memset( buffer, '\0', sizeof(char)*BUFFER_LENGTH );
     string reply;
      
     //Receive a reply from the server
-    if( recv(sock , buffer , sizeof(buffer) , 0) < 0)
+    /*if( recv(sock , buffer , sizeof(buffer) , 0) < 0)
     {
         puts("recv failed");
     }
+
      
     reply = buffer;
+*/
+    while (recv(sock, buffer, sizeof(buffer) + 1, 0))
+    {
+        reply = reply + buffer;
+        memset( buffer, '\0', sizeof(char)*BUFFER_LENGTH );
+    }
+
+    console_log("REPLY----");
+    console_log(reply);
+    console_log("REPLY----");
+    
+
     return reply;
 }
  
