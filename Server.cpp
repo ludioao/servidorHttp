@@ -286,9 +286,6 @@ HttpServer::DispatchRequestToThread(bool verbose, pair<int, string> client) {
             // Recebe a requisicao e responde.
             ParseRequest(*request, verbose, server.get_buffer());
 
-            if (request->get_invalid() == true)
-                break;
-
             // Trava a mutex antes de chama-lo.
             response = getThreadRequest(*request, verbose);
             server.SendResponse(response, actualConnection);
@@ -349,57 +346,55 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
     // Metodo parser.
     method = GetMethod(buffer);
     if (verbose && method == INVALID_METHOD) {
-        cout << "Method or content not recognized.\n";
-        request.set_invalid(true);
+        cout << "Metodo HTTP nao reconhecido.\n";
+        return;
     }
     else {
+            // captar URI (endereco de arquivo.)
+            while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
+                uri += recvbuf[i];
+                i++;
+            }
+            
 
-        // captar URI (endereco de arquivo.)
-        while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
-            uri += recvbuf[i];
-            i++;
-        }
-        
+            // parsear a url recebida e remover caracteres especiais.
+            cout << "Parseando URI" << endl;
+            ParseUri(uri, path, query, type, hostName, port);
+            i++; 
+            if (verbose && path.length() > URI_MAX_LENGTH) {
+                cout << "Requisicao muito longa.\n";
+            }
 
-        // parsear a url recebida e remover caracteres especiais.
-        cout << "Parseando URI" << endl;
-        ParseUri(uri, path, query, type, hostName, port);
-        i++; 
-        if (verbose && path.length() > URI_MAX_LENGTH) {
-            cout << "Requisicao muito longa.\n";
-        }
+            // Get version number
+            buffer = "";
+            while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
+                buffer += recvbuf[i];
+                i++;
+            }
 
-        // Get version number
-        buffer = "";
-        while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
-            buffer += recvbuf[i];
-            i++;
-        }
+            // pula pra proxima linha
+            while (isspace(recvbuf[i])) 
+                i++;
+            
+            // parsea a versao do http.
+            version = GetVersion(buffer);
+            if (verbose && version == INVALID_VERSION) {
+                cout << "Versao do HTTP invalida..\n";
+            }
+            console_log("server requested.....");
+            console_log("uri selected => " + uri);
+            console_log("Method: " + method);
+            console_log("version: " + version);
+            console_log("copy: " + copy);
+            console_log("path: " + path);
+            console_log("query: " + query);
+            console_log("hostname: " + hostName);
+            console_log("port: " + port);
+            console_log(".............................");
+            path = uri;
 
-        // pula pra proxima linha
-        while (isspace(recvbuf[i])) 
-            i++;
-        
-        // parsea a versao do http.
-        version = GetVersion(buffer);
-        if (verbose && version == INVALID_VERSION) {
-            cout << "Versao do HTTP invalida..\n";
-        }
-        console_log("server requested.....");
-        console_log("uri selected => " + uri);
-        console_log("Method: " + method);
-        console_log("version: " + version);
-        console_log("copy: " + copy);
-        console_log("path: " + path);
-        console_log("query: " + query);
-        console_log("hostname: " + hostName);
-        console_log("port: " + port);
-        console_log(".............................");
-        path = uri;
-
-        // Preenche a struct de request.
-        request.Initialize(method, version, copy, path, query, type, hostName, port);
-
+            // Preenche a struct de request.
+            request.Initialize(method, version, copy, path, query, type, hostName, port);
     }
 
    
@@ -457,11 +452,6 @@ HttpServer::HandleRequest(HttpRequest& request, bool verbose) {
 
     // Send response
     if (verbose) {
-        /*int pointer = response.find("\r\n\r\n");
-        if (pointer != (int) string::npos) {
-            string response_header = response.substr(0, pointer);
-            console_log("header is " + response_header);
-        }*/
         cout << endl << "Response: " << response << endl << endl;
     }
     return response;
@@ -512,10 +502,8 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
         // Retrieve from cache.
         if (index != MAX_NUMBER)
         {
-            string fileContentCache = cache.getCacheDataByIndex(index);
-            body = fileContentCache.c_str();
-            response = CreateResponseString(request, response, body, status);
-            //removeHeaderFromContent(request, response);
+            response = cache.getCacheDataByIndex(index);
+            removeHeaderFromContent(request, response);
         }
         else 
         {
@@ -535,24 +523,17 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
 void
 HttpServer::removeHeaderFromContent(HttpRequest &request, string &content)
 {
-       int  pointer = 0;
-        
-       char * buffer = new char[content.length() + 1];
+        int pointer = content.find("\r\n\r\n");
+        if (pointer != (int) string::npos)
+        {
+            string content_header = content.substr(0, pointer);
+            request.ParseHeaders(content_header.c_str(), 0);    
 
-       std::strcpy(buffer, content.c_str());
-        
-       while(1){
-             if(buffer[pointer]=='\r'&&buffer[pointer+1]=='\n'&&buffer[pointer+2]=='\r'&&buffer[pointer+3]=='\n'){
-                  console_log("FOUND header end\n");
-                  break;
-            }
-            pointer++;
-       }
-       
-       string content_header = content.substr(0, pointer);
-       request.ParseHeaders(content_header.c_str(), 0);    
-       content = content.substr(pointer, content.length());
-       request.printHeaders();
+            content = content.substr(pointer, content.length());
+        }
+
+
+        request.printHeaders();
 }
 
 
@@ -599,7 +580,7 @@ HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int 
     response = c.receiveFromHost( );
 
     // get headers and remove from content.
-    //removeHeaderFromContent(request, response);
+    removeHeaderFromContent(request, response);
 
     return response;
 
@@ -638,8 +619,7 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
         
           for(auto head : request.get_headers())
           {
-              newresponse += head->name + ":";
-              newresponse += SPACE;
+              newresponse += head->name + ": ";
               newresponse += head->value;
               newresponse += CRLF;
           }
@@ -658,9 +638,9 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
 
     }
     // adiciona hora e resposta.
-    newresponse += DATE;
+    /*newresponse += DATE;
     newresponse += asctime(gmnow);
-    newresponse += CRLF;
+    newresponse += CRLF;*/
     newresponse += body;
     return newresponse;
 }
@@ -832,7 +812,6 @@ void HttpRequest::Initialize(http_method_t method, http_version_t version, strin
     this->type = type;
     this->host_name = hostName;
     this->port = port;
-    this->invalid = false;
 }
 
 void HttpRequest::ParseHeaders(const char* buffer, int index) {
@@ -861,16 +840,13 @@ void HttpRequest::ParseHeaders(const char* buffer, int index) {
         
         // adiciona a nova struct de header.
         if (!isspace(name.c_str()[0])) {
-            if (name.compare("Date") == 0)
-            {
-                console_log("dont save date... we willl generate after");
-                // do nothing
-            } else {
-                console_log("Header parsed: [" + name + "] => " + value);
+            // if (name.compare("Date") == 0) {
+
+            // }
+            // else {
                 header = new Header(name, value);
                 headers.push_back(header);
-            }
-            
+            // }            
         }
         
         // Limpa os campos.
@@ -899,7 +875,11 @@ HttpRequest::~HttpRequest() {}
 void
 HttpRequest::printHeaders()
 {
-    //
+
+            for(auto head : headers)
+            {
+               console_log("header addiciotnal " + head->name + " value "  + head->value);           
+            }
 }
 
 
