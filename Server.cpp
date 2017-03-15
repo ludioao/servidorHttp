@@ -24,20 +24,36 @@ Arquivo principal do servidor HTTP.
 #include <dirent.h>
 #include <unistd.h>
 #include <fstream>
-
+#include <string>
+#include "Functions.h"
 #include "HttpRequest.h"
 #include "HttpServer.h"
 
 using namespace std;
 
-static bool running = true;
 
 const unsigned char IS_FILE_FLAG = 0x8;
+
+
+
+static bool running = true;
+
+
+// trim from start
+static inline std::string &ltrim(std::string &s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(),
+            std::not1(std::ptr_fun<int, int>(std::isspace))));
+    return s;
+}
+
 
 /*
     Helper para Controle de Signals.
 */
 void handleSigint(int signum) {
+    #ifdef DEBUG_THREAD
+        console_log("Signal is " + signum);
+    #endif        
     // Finaliza o loop.
     running = false;
 }
@@ -45,6 +61,9 @@ void handleSigint(int signum) {
 void handleSigchld(int signum) {
     // Previne processos zombies.
     int status;
+    #ifdef DEBUG_THREAD
+        console_log("Signal is " + signum);
+    #endif
     while (waitpid(-1, &status, WNOHANG) == 0);
 }
 
@@ -69,6 +88,9 @@ char hexToAscii(string hex) {
     ascii += num;
     return (char) ascii;
 }
+
+
+
 
 
 // Construtor do HttpServer.
@@ -123,7 +145,8 @@ HttpServer::InitMimeTypes() {
     MimeTypes["bmp"]    = "image/bmp";
     MimeTypes["gif"]    = "image/gif";
     MimeTypes["jpeg"]   = "image/jpeg";
-    MimeTypes["jpg"]    = "image/jpeg";
+    //MimeTypes["jpg"]    = "image/jpeg";
+    MimeTypes["png"]    = "image/";    
     MimeTypes["tif"]    = "image/tiff";
     MimeTypes["tiff"]   = "image/tiff";
     MimeTypes["xbm"]    = "image/xbm";
@@ -166,7 +189,7 @@ Port_Operacao => Porta para iniciar Operacao;
 numberThreads => Quando o tipo de servidor eh Multithread. Entao utiliza-se o numero de threads fixo.
 */
 void 
-HttpServer::Start(tipoServidor type, bool verbose, long int port_Operacao, int numberThreads) {
+HttpServer::Start(bool verbose, long int port_Operacao) {
     
     signal(SIGINT, handleSigint); // Envia sinal de inicializacao. 
     signal(SIGCHLD, handleSigchld); // Envia sinal p/ processo filho.
@@ -176,98 +199,14 @@ HttpServer::Start(tipoServidor type, bool verbose, long int port_Operacao, int n
     server.Init();
 
     long int actualPortNumber = server.getPortNumber();
-    
-    cout << "Inicializando servidor na porta " << actualPortNumber << endl;
-    cout << "Modo de operacao:";
 
+    console_log("Inicializando servidor na porta " + actualPortNumber);
+    
     // Recebe o tipo de arquivo.
-    if (type == MPROCESS) {
-        cout << " MULTIPROCESSO " << endl;
-        RunMultiProcessed(verbose);
-
-    } else if (type == MTHREADED) {
-        cout << " THREADED " << endl;
-        server.setMaxThreads(numberThreads);
-        RunMultiThreaded(verbose);
-        cout << "numero de threads "<< numberThreads << endl;        
-    } 
+    //server.setMaxThreads(numberThreads);
+    RunMultiThreaded(verbose);    
 }
 
-/*
-Inicia o servidor em modo 
-de MultiProcesso.
-*/
-void 
-HttpServer::RunMultiProcessed(bool verbose) {
-    pid_t pid;
-    pair<int, string> client;
-    int actualConnection;
-    
-    if (verbose) {
-        cout << "Server inicializando...\n\n";
-        cout << "Portal atual: " << server.getPortNumber() << endl;
-    }
-
-    // Evento de loop.
-    while (running) {
-
-        // Aguarda por uma conexao.
-        client = server.Connect();
-        actualConnection = client.first;
-
-        if (actualConnection > 0) {
-            // Executa fork de um novo processo filho p/ receber a conexao cliente.
-            pid = fork();
-            if (pid < 0) {
-                perror("Http Server: Fail to fork child.");
-                continue;
-            } else if (pid == 0) {
-                // Processo filho
-                DispatchRequestToChild(verbose, client);
-            } else {
-                // Voltando p/ processo pai. Finaliza a conexao.
-                server.Close(actualConnection);
-            }
-        }
-        
-        // processo fica em stand-by
-        usleep(SLEEP_MSEC);
-    }
-    if (verbose) {
-        cout << "Servidor desligando\n";
-    }
-}
-
-
-
-/*Despacha a requisicao pro processo filho.*/
-void 
-HttpServer::DispatchRequestToChild(bool verbose, pair<int, string> client) {
-    HttpRequest request;
-    string response;
-    time_t begin, end; // definicao de tmepo da requisicao.
-    int actualConnection = client.first;
-
-    // Finaliza processo quando o tempo passado excede o tempo limite
-    time(&begin);    time(&end);
-    elapsedtime = difftime(end, begin);
-
-    do {
-        if (server.Receive(verbose, client)) { 
-            // Recebe request e envia resposta.
-            ParseRequest(request, verbose, server.get_buffer());
-            response = HandleRequest(request, verbose);
-            server.SendResponse(response, actualConnection);
-        }
-        // Calcula o tempo passado.
-        time(&end);
-        elapsedtime = difftime(end, begin);
-    } while (elapsedtime < TIME_OUT);
-
-    // Fecha conexao e finaliza o processo.
-    server.Close(actualConnection);
-    exit(EXIT_SUCCESS);
-}
 
 void 
 HttpServer::RunMultiThreaded(bool verbose) {
@@ -356,6 +295,9 @@ HttpServer::DispatchRequestToThread(bool verbose, pair<int, string> client) {
             // Recebe a requisicao e responde.
             ParseRequest(*request, verbose, server.get_buffer());
 
+            if (request->get_invalid() == true)
+                break;
+
             // Trava a mutex antes de chama-lo.
             response = getThreadRequest(*request, verbose);
             server.SendResponse(response, actualConnection);
@@ -393,13 +335,15 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
     int i = 0;
     http_method_t method;
     http_version_t version;
+    int port = DEFAULT_REMOTE_PORT;
     string  buffer = "",
             path = "",
             query = "",
             type = "",
             uri = "",
             hostName = "",
-            uriRequested = "";
+            uriRequested = "",
+            userAgent = "";
     
     // Mantem uma copia da requisicao original
     string copy = recvbuf;
@@ -415,41 +359,61 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
     method = GetMethod(buffer);
     if (verbose && method == INVALID_METHOD) {
         cout << "Metodo HTTP nao reconhecido.\n";
+        request.set_invalid(true);
+        return;
+    }
+    else {
+            
+            // captar URI (endereco de arquivo.)
+            while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
+                uri += recvbuf[i];
+                i++;
+            }
+            
+
+            // parsear a url recebida e remover caracteres especiais.
+            cout << "Parseando URI" << endl;
+            ParseUri(uri, path, query, type, hostName, port);
+            i++; 
+            if (verbose && path.length() > URI_MAX_LENGTH) {
+                cout << "Requisicao muito longa.\n";
+            }
+
+            // Get version number
+            buffer = "";
+            while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
+                buffer += recvbuf[i];
+                i++;
+            }
+
+            // pula pra proxima linha
+            while (isspace(recvbuf[i])) 
+                i++;
+            
+            // parsea a versao do http.
+            version = GetVersion(buffer);
+            if (verbose && version == INVALID_VERSION) {
+                cout << "Versao do HTTP invalida..\n";
+                request.set_invalid(true);
+                return;
+            }
+            console_log("server requested.....");
+            console_log("uri selected => " + uri);
+            console_log("Method: " + method);
+            console_log("version: " + version);
+            console_log("copy: " + copy);
+            console_log("path: " + path);
+            console_log("query: " + query);
+            console_log("hostname: " + hostName);
+            console_log("port: " + port);
+            console_log(".............................");
+            path = uri;
+
+            // Preenche a struct de request.
+            request.Initialize(method, version, copy, path, query, type, hostName, port);
     }
 
-    // captar URI (endereco de arquivo.)
-    while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
-        uri += recvbuf[i];
-        i++;
-    }
-    path = DIRECTORY;
-
-    // parsear a url recebida e remover caracteres especiais.
-    ParseUri(uri, path, query, type);
-    i++; 
-    if (verbose && path.length() > URI_MAX_LENGTH) {
-        cout << "Requisicao muito longa.\n";
-    }
-
-    // Get version number
-    buffer = "";
-    while (i <= BUFFER_LENGTH && !isspace(recvbuf[i])) {
-        buffer += recvbuf[i];
-        i++;
-    }
-
-    // pula pra proxima linha
-    while (isspace(recvbuf[i])) 
-        i++;
-    
-    // parsea a versao do http.
-    version = GetVersion(buffer);
-    if (verbose && version == INVALID_VERSION) {
-        cout << "Versao do HTTP invalida..\n";
-    }
-
-    // Preenche a struct de request.
-    request.Initialize(method, version, copy, path, query, type);
+   
 }
 
 // Wrapper pra receber requisicao do thread.
@@ -470,6 +434,9 @@ HttpServer::HandleRequest(HttpRequest& request, bool verbose) {
     http_version_t version = request.get_version();
     string path = request.get_path();
     string type = request.get_content_type();
+
+    console_log("content type is " + type);
+ 
     string response = "";
     fstream file;
 
@@ -506,6 +473,7 @@ HttpServer::HandleRequest(HttpRequest& request, bool verbose) {
     return response;
 }
 
+
 string 
 HttpServer::HandleGet(HttpRequest request, http_status_t status) {
     
@@ -516,6 +484,8 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
     string type = request.get_content_type();
     string copy = request.get_copy();
     string response = "";
+
+    Cache* itemCache;
     
     // stat, usado p/ verificar se o arquivo eh uma pasta e mostrar a lista de arquivos.
 
@@ -523,162 +493,144 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
     http_method_t method = request.get_method();
 
     // variaveis temporarias;
-    int index = 0, c = 0;
+    //int index = 0, c = 0;
     
     cout << "PATH ==> " << path << endl;
 
-    if (IsDirectory(path)) {
-        body = CreateIndexHtml(path);
+
+    //perror("Server Cache: Not found in cache");
+    //status = NOT_FOUND;
+
+    status = OK;
+
+    // check if is in cache service.
+    if (method == GET && status == OK) 
+    {
+        // get host name
+        string host = request.get_host_name();
+
+        // call for host.
+        cout << "Calling for host: " << host << endl;
+
+        // cache url.
+        string cacheUrl = host + path;
+        console_log("URL is " + cacheUrl);
+
+        unsigned long int index = cache.getCacheIndex(cacheUrl);
+        // Retrieve from cache.
+        if (index != MAX_NUMBER)
+        {
+            body = cache.getCacheDataByIndex(index);
+            itemCache = cache.getCacheItem(index);
+            response = CreateResponseString(request, response, body, status, itemCache);
+
+            //removeHeaderFromContent(request, response);
+        }
+        else 
+        {
+            // Download and get file!!!!
+            string fileContentRemote = downloadFile(request, host, path, request.get_port());
+            body = fileContentRemote.c_str();
+            ltrim(body);
+            
+            //removeHeaderFromContent()
+            
+            // Save to Cache    
+            console_log("Saving to cache...");
+            
+            removeHeaderFromContent(request, body);
+
+            ltrim(body);
+
+            Cache* temporaryCache = new Cache(host + path, body, 1024);
+            temporaryCache->add_headers( request.get_headers() );
+            cache.storeCache(temporaryCache);
+            
+            temporaryCache->print_headers();
+
+            response = CreateResponseString(request, response, body, status, temporaryCache);
+        }    
     }
-    else {
+
+    return response;
+}
+
+void
+HttpServer::removeHeaderFromContent(HttpRequest &request, string &content)
+{
+        int pointer = content.find("\r\n\r\n");
+        if (pointer != (int) string::npos)
+        {
+            string content_header = content.substr(0, pointer);
+            request.ParseHeaders(content_header.c_str(), 0);    
+
+            content = content.substr(pointer, content.length());
+        }
         
-        // Abre o arquivo.
-        file.open(path, fstream::in);
-        if (!file.good()) {
-            perror("Server Error: Fail to open file.");
-            status = NOT_FOUND;
-        }
+        
 
-        if (method == GET && status == OK) {           
-                
-                // parsea todos os caracteres do arquivo
-                c = file.get();
-                while (c != EOF && index <= BODY_LENGTH) {
-                    body += (char) c;
-                    index++;
-                    c = file.get();
-                }           
-        }
-        file.close();        
-    }
-
-    response = CreateResponseString(request, response, body, status);
-
-    return response;
+        //request.printHeaders();
 }
 
-bool
-HttpServer::IsDirectory(const string path)
-{
-    struct stat s;
-    if (stat(path.c_str(), &s) == 0)
-        if (s.st_mode & S_IFDIR)
-            return true;
-    
-    return false;
-}
+
 
 string
-HttpServer::CreateIndexHtml(const string path)
+HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int port)
 {
+    ClientSocket c;
 
-    string   response = "<!doctype html><html><head>";
-            response += "<title>Index of /" + path  + "</title>";
-            response += "</head><body>";
-            response += "<h1>Index of " + path + "</h1>";
-            response += CreateIndexList(path);
-            response += "</body>";
-            response += "</html> ";
+    string headers = "";
+
+    string response = "";
+    response.clear();
+     
+    //connect to host
+    c.connectToHost(hostName, port);
+     
+    //send some data    
+    string request_data;
+    request_data = "GET " + uri + " HTTP/1.1\n";
+    //request_data.append( HDR_ENDLINE );
+    request_data.append("Host");
+    request_data.append(HDR_DELIMETER);
+    request_data.append(hostName);
+    request_data.append(HDR_ENDLINE);
+    request_data.append("Connection");
+    request_data.append(HDR_DELIMETER);
+    request_data.append("close");
+    request_data.append(HDR_ENDLINE);
+    request_data.append(HDR_ENDLINE);
+
+    /*for (auto head : headers)
+    {
+
+    }*/
+            
+    console_log("Sending data to server...");
+    console_log(request_data);
+    console_log("");
+
+    c.sendDataHost(request_data.c_str());
+     
+    //receive and echo reply
+    response = c.receiveFromHost( );
+
+    // get headers and remove from content.
+    //removeHeaderFromContent(request, response);
 
     return response;
 
 }
-
-string
-HttpServer::CreateIndexList(const string actualFullPath)
-{
-
-    // Get Files and Directories
-    DIR *dirObj;
-    struct dirent *node;
-
-    dirObj = opendir(actualFullPath.c_str());
-
-    vector<string> files;
-    vector<string> directories;
-
-    // leia o diretorio inteiro.
-    if (dirObj != NULL)
-    {
-        while( (node = readdir(dirObj)) ) {
-            if (node->d_type == IS_FILE_FLAG) {
-                files.push_back( string(node->d_name) );
-            }
-            else {
-                directories.push_back( string(node->d_name) );
-            }
-        }
-    }
-    
-    // fecha a pasta.
-    closedir(dirObj);
-
-    // remove os links de recursao.
-    directories.erase( std::remove(directories.begin(), directories.end(), string(".")), directories.end() );
-
-    // ordena os arquivos pelo nome
-    sort(files.begin(), files.end());
-    // ordena os diretorios pelo nome
-    sort(directories.begin(), directories.end());
-
-    // prepara a resposta.
-    string response;
-    string fileFormatted = "";
-    string dirName = "";
-
-    // remove o "www" do caminho..
-    string urlPath = regex_replace(actualFullPath, regex("\\www"), "");
-
-    // remove o ultimo caractere nulo.
-    if (urlPath.back() == '\0') {
-        urlPath.pop_back();
-    }
-
-    // adiciona as pastas na lista
-    for (string dir : directories)
-    {
-        // adiciona barra no final p/ navegar entre as pastas.
-        if (urlPath.back() != '/') {
-            urlPath = urlPath + "/";
-        }
-
-        // renomear links ".."
-        if (dir.compare("..") == 0) {
-           fileFormatted = urlPath + "../";
-           dirName = "Parent directory";
-        }
-        else {
-            dirName = dir;
-            fileFormatted = urlPath + dir;
-        }
-
-        response += "<a href='" + fileFormatted + "'>"+ dirName + "</a><br/>\n";
-    }
-    
-    response += "<ul>"; 
-    for (string file : files)
-    {
-        response += "<li>";
-        fileFormatted = urlPath + file;
-        response += "<a href='" + fileFormatted + "'>"+ file + "</a>\n";
-        response += "</li>";
-    }
-    response += "</ul>";
-
-    return response;
-}
-
 
 // Criar response string.
 string 
-HttpServer::CreateResponseString(HttpRequest request, string response, string body, http_status_t status) {
+HttpServer::CreateResponseString(HttpRequest request, string response, string body, http_status_t status, const Cache* item) {
     
     time_t now;
     struct tm* gmnow;
-
+    
     int contentlen = body.length() == 0 ? 0 : body.length() - 1;
     http_method_t method = request.get_method();
-    string type = request.get_content_type();
 
     // Cria uma nova resposta.
     string newresponse = response;
@@ -688,24 +640,31 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
     gmnow = gmtime(&now);
 
     // prepara resposta
-    newresponse += HTTPSERVER_VERSION;
-    newresponse += SPACE;
-    newresponse += statuses[status];
-    newresponse += CRLF;
-
     // Este programa esta apenas funcionando com metodos GET.
     if (status == OK && method == GET) {
-        newresponse += ACCEPT_RANGES;
-        newresponse += BYTES;
-        newresponse += CRLF;
-        newresponse += CONTENT_TYPE;
-        newresponse += type;
-        newresponse += CRLF;
-        newresponse += CONTENT_LENGTH;
-        newresponse += std::to_string(contentlen);
-        newresponse += CRLF;
+          for(auto head : item->headers)
+          {
+              if (head->name.compare("Content-Length") == 0) continue;
+              if (head->name.compare("Date") == 0) continue;
+              if (head->value.length() == 0)
+              {
+                  newresponse += head->name;
+                  newresponse += CRLF;
+              }
+              else {
+                  newresponse += head->name + ": ";
+                  //ltrim(head->value);
+                  newresponse += head->value;
+                  newresponse += CRLF;
+              }
+              
+          }
     }
-    // adiciona hora e resposta.
+
+
+    newresponse += CONTENT_LENGTH;
+    newresponse += std::to_string(contentlen);
+    newresponse += CRLF;
     newresponse += DATE;
     newresponse += asctime(gmnow);
     newresponse += CRLF;
@@ -752,16 +711,58 @@ HttpServer::GetMimeType(string extension) {
 }
 
 void 
-HttpServer::ParseUri(string& uri, string& path, string& query, string& type) {
+HttpServer::ParseUri(string& uri, string& path, string& query, string& type, string &hostName, int &port) {
     int relpath = uri.find(PREVDIR);
+    int protocolIndex = uri.find("://");
     int length;
     int i = 0;
     string hex = "";
     string extension = "";
+    string tmpProtocol = "";
+    string tmphostName;
+    string tmpPort = "";
+    string tmpUri = "";
     char c;
 
-    //Remove caracteres, verificando do tipo "/.."
 
+
+    /* Verifica protocolo requisitado */
+    if (protocolIndex != (int) string::npos) {
+        tmpProtocol = uri.substr(0, protocolIndex);
+        tmphostName = uri.substr(protocolIndex + 3, uri.length());
+        //console_log("Temphostname is " + tmphostName);
+
+        //cout << "Protocolo requisitado " << tmpProtocol << endl;        
+        if (! (tmpProtocol.compare("http") == 0 ) ) { // || tmpProtocol.compare("https") 
+            perror("Protocolo invalido!");            
+        }
+    }
+    
+    int firstBackslash = tmphostName.find("/");
+
+    
+    if (firstBackslash != (int) string::npos) {
+        hostName = tmphostName.substr(0, firstBackslash);
+
+        tmpUri = tmphostName.substr(firstBackslash, tmphostName.length());
+        uri = tmpUri;
+        
+        // Verifica se tem porta passada explicitamente.
+        int portIndex = hostName.find(":");
+        if (portIndex != (int) string::npos) {
+            tmpPort = hostName.substr(portIndex + 1, hostName.length());
+            
+            port = stoi(tmpPort);
+            console_log("SERVER PARSER: Currently at port " + port);
+
+            hostName = hostName.substr(0, portIndex);
+            console_log("SERVER PARSER: Hostname is " + hostName);
+        }
+    }
+
+    // indice dos ":"
+    
+    //Remove caracteres, verificando do tipo "/.."
     while (relpath != (int) string::npos) {
         uri.erase(relpath, strlen(PREVDIR));
         relpath = uri.find(PREVDIR);
@@ -810,6 +811,9 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type) {
         i++;
     }
 
+
+
+
     // Interpreta o mimetype usando a extensao
     type = GetMimeType(extension);
 }
@@ -817,15 +821,15 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type) {
 
 /*Funcoes do HTTPREQUEST.*/
 
-HttpRequest::HttpRequest(http_method_t method, http_version_t version, string copy, string path, string query, string type) {
-    Initialize(method, version, copy, path, query, type);
+HttpRequest::HttpRequest(http_method_t method, http_version_t version, string copy, string path, string query, string type,  string hostName, int port) {
+    Initialize(method, version, copy, path, query, type, hostName, port);
 }
 
 HttpRequest::HttpRequest() {
-    Initialize(INVALID_METHOD, INVALID_VERSION, "", "", "", "");
+    Initialize(INVALID_METHOD, INVALID_VERSION, "", "", "", "", "", 80);
 }
 
-void HttpRequest::Initialize(http_method_t method, http_version_t version, string copy, string path, string query, string type) {
+void HttpRequest::Initialize(http_method_t method, http_version_t version, string copy, string path, string query, string type,  string hostName, int port) {
     toolong = false;
     this->method = method;
     this->version = version;
@@ -833,6 +837,9 @@ void HttpRequest::Initialize(http_method_t method, http_version_t version, strin
     this->path = path;
     this->query = query;
     this->type = type;
+    this->host_name = hostName;
+    this->port = port;
+    this->invalid = false;
 }
 
 void HttpRequest::ParseHeaders(const char* buffer, int index) {
@@ -840,7 +847,11 @@ void HttpRequest::ParseHeaders(const char* buffer, int index) {
     int length = strlen(buffer);
     string name = "";
     string value = "";
+    int asciiN;
+    
     const Header* header;
+
+    int iteraction = -1;
 
     while (i <= length) {
         // Pega o nome do cabecalho.
@@ -859,10 +870,37 @@ void HttpRequest::ParseHeaders(const char* buffer, int index) {
         // pula os caracteres \r\n
         i += 2;
         
+    
         // adiciona a nova struct de header.
         if (!isspace(name.c_str()[0])) {
-            header = new Header(name, value);
-            headers.push_back(header);
+
+                // parser do primeiro...
+                if (++iteraction == 0) {
+                    // get first \n
+                    asciiN = name.find("\n");
+                    string headReply = name.substr(0, asciiN);
+                    header = new Header(headReply, "");
+                    headers.push_back(header);
+                    
+                    console_log("headreply is " + headReply);
+
+                    // get date.
+                    string dateReply = name.substr(asciiN, name.length());
+
+                    int dateHeadIndex = dateReply.find(":");
+                    if (dateHeadIndex != (int) string::npos) {
+                        string dateHead = dateReply.substr(0, dateHeadIndex);
+                        string dateValue = dateReply.substr(dateHeadIndex, dateReply.length());
+                        
+                        header = new Header(dateHead, dateValue);
+                        headers.push_back(header);
+                    }
+                }
+                else {                  
+                        header = new Header(name, value);
+                        headers.push_back(header);
+                }
+       
         }
         
         // Limpa os campos.
@@ -886,3 +924,142 @@ void HttpRequest::Reset() {
 }
 
 HttpRequest::~HttpRequest() {}
+
+
+void
+HttpRequest::printHeaders()
+{
+
+            /*for(auto head : headers)
+            {
+               console_log("header addiciotnal " + head->name + " value "  + head->value);           
+            }*/
+}
+
+
+/*
+* Client Socket
+*/
+
+
+ClientSocket::ClientSocket()
+{
+    sock = -1;
+    port = 0;
+    address = "";
+}
+ 
+/**
+    Connect to a host on a certain port number
+*/
+bool ClientSocket::connectToHost(string address , int port)
+{
+    //create socket if it is not already created
+    if(sock == -1)
+    {
+        //Create socket
+        sock = socket(AF_INET , SOCK_STREAM , 0);
+        if (sock == -1)
+        {
+            perror("Could not create socket");
+        }
+         
+        cout<<"Socket created\n";
+    }
+    else    {   /* OK , nothing */  }
+     
+    //setup address structure
+    if(inet_addr(address.c_str()) == -1)
+    {
+        struct hostent *he;
+        struct in_addr **addr_list;
+         
+        //resolve the hostname, its not an ip address
+        if ( (he = gethostbyname( address.c_str() ) ) == NULL)
+        {
+            //gethostbyname failed
+            herror("gethostbyname");
+            console_log("Failed to resolve hostname");
+            return false;
+        }
+         
+        //Cast the h_addr_list to in_addr , since h_addr_list also has the ip address in long format only
+        addr_list = (struct in_addr **) he->h_addr_list;
+ 
+        for(int i = 0; addr_list[i] != NULL; i++)
+        {
+            //strcpy(ip , inet_ntoa(*addr_list[i]) );
+            server.sin_addr = *addr_list[i];
+             
+            cout<<address<<" resolved to "<<inet_ntoa(*addr_list[i])<<endl;
+             
+            break;
+        }
+    }
+     
+    //plain ip address
+    else
+    {
+        server.sin_addr.s_addr = inet_addr( address.c_str() );
+    }
+     
+    server.sin_family = AF_INET;
+    server.sin_port = htons( port );
+     
+    //Connect to remote server
+    if (connect(sock , (struct sockaddr *)&server , sizeof(server)) < 0)
+    {
+        perror("connect failed. Error");
+        return 1;
+    }
+     
+    cout<<"Connected\n";
+    return true;
+}
+ 
+/**
+    Send data to the connected host
+*/
+bool ClientSocket::sendDataHost(string data)
+{
+    //Send some data
+    if( send(sock , data.c_str() , strlen( data.c_str() ) , 0) < 0)
+    {
+        perror("Send failed : ");
+        return false;
+    }
+    cout<<"Data send\n";
+     
+    return true;
+}
+ 
+/**
+    Receive data from the connected host
+*/
+string ClientSocket::receiveFromHost()
+{
+    
+    char buffer[BUFFER_LENGTH];
+    memset( buffer, '\0', sizeof(char)*BUFFER_LENGTH );
+    string reply = "";
+  
+    while (recv(sock, buffer, sizeof(buffer) + 1, 0))
+    {
+        reply += buffer;
+        memset( buffer, '\0', sizeof(char)*BUFFER_LENGTH );
+    }
+
+    return reply;
+}
+ 
+
+
+
+
+
+
+
+
+
+
+

@@ -20,6 +20,7 @@
 #include <pthread.h>
 #include "SocketServer.h"
 #include "HttpRequest.h"
+#include "Cache.h"
 
 #define ACCEPT_RANGES  "Accept-Ranges: "
 #define BYTES          "bytes"
@@ -35,7 +36,8 @@ class HttpServer {
     private: 
 
         SocketServer server;
-        vector<pair<HttpRequest*, string> > cache;
+        CacheService cache;
+        //vector<pair<HttpRequest*, string> > cache;
         double elapsedtime;
         pthread_attr_t attr;
         //pthread_mutex_t cachemutex;
@@ -52,10 +54,8 @@ class HttpServer {
         void InitMimeTypes();
 
         // Metodos p/ trabalhar com requisicoes multi-processos.
-        void Start(tipoServidor type, bool verbose, long int portNumber, int);
-        void RunMultiProcessed(bool verbose);
-        void DispatchRequestToChild(bool verbose, pair<int, string> client);
-
+        void Start( bool verbose, long int portNumber);
+        
         // Metodos p/ trbalhar com threads.
         void RunMultiThreaded(bool verbose);
         void* DispatchRequestToThread(bool verbose, pair<int, string> client);
@@ -68,23 +68,28 @@ class HttpServer {
 
         // Metodo p/ tratar envio de resposta.
         string HandleGet(HttpRequest request, http_status_t status);        
-        string CreateResponseString(HttpRequest request, string response, string body, http_status_t status);   
+        string CreateResponseString(HttpRequest request, string response, string body, http_status_t status, const Cache* item);   
 
         // Helpers.
         http_method_t GetMethod(const string method);
         http_version_t GetVersion(const string version);
         string GetMimeType(string extension);
-        void ParseUri(string& uri, string& path, string& query, string& type);
-        string CreateIndexHtml(const string path);
-        string CreateIndexList(const string path);
-        bool IsDirectory(const string path);
-
+        void ParseUri(string& uri, string& path, string& query, string& type, string &hostName, int &port);
+        
         // Thread management
         void Pthread_detach(pthread_t tid);
 
         // Proxy management
         void connectToServer(const string & upstreamHost, unsigned short upstreamPort);
 
+        // 
+        void serveFile();
+        void downloadFileRemote();
+        void serveFromCache();
+
+        string downloadFile(HttpRequest &, string hostName, string uri, int port);        
+
+        void removeHeaderFromContent(HttpRequest &, string &content);
 
 };
 

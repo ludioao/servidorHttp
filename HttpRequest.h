@@ -33,6 +33,7 @@ using namespace std;
 #define PORT           8080 // Porta padrao para escuta (qdo nao passado)
 #define SLEEP_MSEC     1000
 #define TIME_OUT       1.0
+#define DEFAULT_REMOTE_PORT   80
 
 enum http_method_t {
     INVALID_METHOD = -1, GET, POST, PUT, DELETE,
@@ -64,50 +65,61 @@ public:
 };
 
 class HttpRequest {
-private:
-    vector<const Header*> headers;
-    http_method_t method;
-    http_version_t version;
-    string copy;
-    string path;
-    string query;
-    string type;
-    bool toolong;
-public:
-    HttpRequest(http_method_t method, http_version_t version, string copy, string path, string query, string type);
-    HttpRequest();
-    ~HttpRequest();
+    private:
+        vector<const Header*> headers;
+        http_method_t method;
+        http_version_t version;
+        string copy;
+        string path;
+        string query;
+        string type;
+        string host_name;
+        bool invalid;
+        int port;
+        bool toolong;
+        
+    public:
+        HttpRequest(http_method_t method, http_version_t version, string copy, string path, string query, string type, string hostName, int port);
+        HttpRequest();
+        ~HttpRequest();
 
-    // helper pra comparacao de requisicao.
-    bool Equals(HttpRequest& other) {
-        return (method == other.get_method() && version == other.get_version() && path.compare(other.get_path()) == 0 && query.compare(other.get_query()) == 0);
-    }
+        // helper pra comparacao de requisicao.
+        bool Equals(HttpRequest& other) {
+            return (method == other.get_method() && version == other.get_version() && path.compare(other.get_path()) == 0 && query.compare(other.get_query()) == 0);
+        }
 
-    // Inicializacao do Request
-    void Initialize(http_method_t method, http_version_t version, string copy, string path, string query, string type);
-    void Reset();
+        // Inicializacao do Request
+        void Initialize(http_method_t method, http_version_t version, string copy, string path, string query, string type,  string hostName, int port);
+        void Reset();
 
-    // Parseamento do cabecalho.
-    void ParseHeaders(const char* buffer, int index);
+        // Parseamento do cabecalho.
+        void ParseHeaders(const char* buffer, int index);
 
-    // Getters
-    vector<const Header*> get_headers() { return headers; }
-    http_method_t get_method() { return method; }
-    http_version_t get_version() { return version; }
-    string get_copy() { return copy; }
-    string get_path() { return path; }
-    string get_query() { return query; }
-    string get_content_type() { return type; }
-    bool get_flag() { return toolong; }
+        // Getters
+        vector<const Header*> get_headers() { return headers; }
+        http_method_t get_method() { return method; }
+        http_version_t get_version() { return version; }
+        string get_copy() { return copy; }
+        string get_path() { return path; }
+        string get_query() { return query; }
+        string get_content_type() { return type; }
+        string get_host_name() { return host_name; };
+        bool get_invalid() { return invalid; };
+        int get_port() { return port; };
+        bool get_flag() { return toolong; }
 
-    // Setters
-    void set_method(http_method_t method) { this->method = method; }
-    void set_version(http_version_t version) { this->version = version; }
-    void set_copy(string copy) { this->copy = copy; }
-    void set_content_type(string type) { this->type = type; }
-    void set_path(string path) { this->path = path; }
-    void set_query(string query) { this->query = query; }
-    void set_flag(bool value) { toolong = value; }
+        // Setters
+        void set_method(http_method_t method) { this->method = method; }
+        void set_version(http_version_t version) { this->version = version; }
+        void set_copy(string copy) { this->copy = copy; }
+        void set_content_type(string type) { this->type = type; }
+        void set_path(string path) { this->path = path; }
+        void set_query(string query) { this->query = query; }
+        void set_flag(bool value) { toolong = value; }
+        void set_invalid(bool value) { invalid = value; };
+
+        void printHeaders();
+
 };
 
 #endif

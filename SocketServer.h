@@ -2,6 +2,7 @@
 #define SOCKET_H
 #include <map>
 #include <arpa/inet.h>
+#include<netdb.h> //hostent
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -18,6 +19,10 @@ using namespace std;
 
 #define BUFFER_LENGTH  8191
 #define BACKLOG        128 // limite maximo 
+#define HDR_DELIMETER   ": "
+#define HDR_ENDLINE     "\r\n"
+#define HDR_ENDLINE_INVERT "\n\r"
+
 
 enum tipoServidor {
     MPROCESS = 0, MTHREADED
@@ -74,4 +79,26 @@ class SocketServer {
         int getMaxThreads(){ return maxThreads; };
         void setMaxThreads(int val){ maxThreads = val; /* std::cout << "setei ess abagaca " << maxThreads << std::endl; */ };
 };
+
+
+/*
+Classe pra tratar requisicao do client socket.
+*/
+class ClientSocket {
+ 
+    private:
+        int sock;
+        string address;
+        int port;
+        struct sockaddr_in server;
+        
+    public:
+        ClientSocket();
+        bool connectToHost(string, int);
+        bool sendDataHost(string data);
+        string receiveFromHost();
+};
+
+
+
 #endif
