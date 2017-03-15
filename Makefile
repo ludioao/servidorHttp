@@ -1,13 +1,13 @@
 CPPC=g++
-CFLAGS= -pedantic -W -Wall -pthread -lpthread
+CFLAGS= -pedantic -W -pthread -lpthread
 STD=-std=c++11
 VERBOSE=-v
 
 all:
-	$(CPPC) $(STD) $(CFLAGS) *.cpp -o servidorHttp
+	$(CPPC) $(STD) $(CFLAGS) *.cpp -o proxyHttp
 
 clean:
-	rm -rf servidorHttp *.o *.dSYM
+	rm -rf proxyHttp *.o *.dSYM
 
 
 

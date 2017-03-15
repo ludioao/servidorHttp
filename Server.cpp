@@ -413,7 +413,11 @@ string
 HttpServer::getThreadRequest(HttpRequest& request, bool verbose) {
     string response = "";
 
-    response = HandleRequest(request, verbose);
+    console_log("itens na cache eh " + std::to_string(cache.getCacheSize()));
+
+    cache.getUrlCaches();
+
+    response = HandleRequest(request, verbose); 
 
     return response;
 }
@@ -426,9 +430,6 @@ HttpServer::HandleRequest(HttpRequest& request, bool verbose) {
     http_version_t version = request.get_version();
     string path = request.get_path();
     string type = request.get_content_type();
-
-    console_log("content type is " + type);
- 
     string response = "";
     fstream file;
 
@@ -460,7 +461,7 @@ HttpServer::HandleRequest(HttpRequest& request, bool verbose) {
 
     // Send response
     if (verbose) {
-        cout << endl << "Response: " << response << endl << endl;
+        //cout << endl << "Response: " << response << endl << endl;
     }
     return response;
 }
@@ -476,55 +477,31 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
     string type = request.get_content_type();
     string copy = request.get_copy();
     string response = "";
+    string host = request.get_host_name();
+    string cacheUrl = "";
+    
 
-    Cache* itemCache;
     
     // stat, usado p/ verificar se o arquivo eh uma pasta e mostrar a lista de arquivos.
 
     // informacao do request http
     http_method_t method = request.get_method();
 
-    // variaveis temporarias;
-    //int index = 0, c = 0;
-    
-    cout << "PATH ==> " << path << endl;
-
-
-    //perror("Server Cache: Not found in cache");
-    //status = NOT_FOUND;
-
     status = OK;
 
     // check if is in cache service.
     if (method == GET && status == OK) 
     {
-        // get host name
-        string host = request.get_host_name();
-
-        // call for host.
-        cout << "Calling for host: " << host << endl;
-
-        // cache url.
-        string cacheUrl = host + path;
-        console_log("URL is " + cacheUrl);
+        cacheUrl.clear();
+        cacheUrl = host + path;
+        console_log("REQUESTED FOR URL " + cacheUrl);
 
         unsigned long int index = cache.getCacheIndex(cacheUrl);
+
         // Retrieve from cache.
         if (index != MAX_NUMBER)
         {
-            body = cache.getCacheDataByIndex(index);
-            itemCache = cache.getCacheItem(index);
-
-            console_log("cache retrieved >>>");
-            console_log(body);
-            console_log("<<< cache retrieved");
-
-            console_log("header count is " + itemCache->headers.size());
-            
-
-            response = CreateResponseString(request, response, body, status, itemCache);
-
-            //removeHeaderFromContent(request, response);
+            response = cache.createResponseString(index);
         }
         else 
         {
@@ -533,28 +510,19 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
             body = fileContentRemote.c_str();
             ltrim(body);
             
-            //removeHeaderFromContent()
-            
             // Save to Cache    
             console_log("Saving to cache...");
-            
             removeHeaderFromContent(request, body);
-
             ltrim(body); 
 
-            console_log("body retrieved >>> ");   
-            console_log(body);
-            console_log("<<< body retrieved");
-
-            Cache* temporaryCache = new Cache(host + path, body, 1024);
+            Cache* temporaryCache = new Cache(cacheUrl, body, body.length());
             temporaryCache->add_headers( request.get_headers() );
-            cache.storeCache(temporaryCache);
+            console_log("saving url is  "  + temporaryCache->getUrl());
             
+            cache.storeCache(temporaryCache);            
             temporaryCache->print_headers();
 
             response = CreateResponseString(request, response, body, status, temporaryCache);
-
-            
         }    
     }
 
@@ -628,6 +596,8 @@ HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int 
 
 }
 
+
+
 // Criar response string.
 string 
 HttpServer::CreateResponseString(HttpRequest request, string response, string body, http_status_t status, Cache* item) {
@@ -635,7 +605,7 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
     time_t now;
     struct tm* gmnow;
     
-    int contentlen = body.length() == 0 ? 0 : body.length() - 1;
+    int contentlen = body.length() == 0 ? 0 : body.length() -1;
     http_method_t method = request.get_method();
 
     // Cria uma nova resposta.
@@ -648,6 +618,8 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
     // prepara resposta
     // Este programa esta apenas funcionando com metodos GET.
     if (status == OK && method == GET) {
+        if (item->headers.size() > 0) {
+          
           for(auto head : item->headers)
           {
               if (head->name.compare("Content-Length") == 0) continue;
@@ -662,9 +634,11 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
                   //ltrim(head->value);
                   newresponse += head->value;
                   newresponse += CRLF;
-              }
-              
+              }              
           }
+
+        }
+          
     }
 
 
@@ -674,11 +648,16 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
     newresponse += DATE;
     newresponse += asctime(gmnow);
     newresponse += CRLF;
+
+    console_log("::: BEGIN RESPONSE HEADER :::");
+    console_log(newresponse);
+    console_log("::: END HEADER :::");
+
+    
+
     newresponse += body;
 
 
-    //delete item;
-    item->Reset();
 
     return newresponse;
 }
@@ -1057,7 +1036,7 @@ string ClientSocket::receiveFromHost()
     while (recv(sock, buffer, sizeof(buffer) + 1, 0))
     {
         reply += buffer;
-        console_log(buffer);
+        //console_log(buffer);
         memset( buffer, '\0', sizeof(char)*BUFFER_LENGTH );
     }
 

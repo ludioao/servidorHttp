@@ -23,8 +23,10 @@ class Cache {
         unsigned long int fileNumber;
         string HeadResponse;
 
-        Cache();
+        string HeaderAll;
 
+        Cache();
+        ~Cache();
 
         Cache(string, string, unsigned long long int);
 
@@ -47,7 +49,7 @@ class Cache {
                 headers.pop_back();
             }
         }
-
+        string createResponseHeader();
 };
 
 class CacheService {
@@ -58,6 +60,7 @@ class CacheService {
 
     public:
 
+        
         // ... Cache search
         Cache getCache(string, string);        
 
@@ -67,6 +70,9 @@ class CacheService {
 
         string getCachePath(unsigned long int cacheNumber);
 
+        string createResponseString(int index);
+
+
         // ... Cache delete.
         void deleteCache(int index);
         // ... Cache save.
@@ -74,8 +80,10 @@ class CacheService {
         // void findCache();
         bool alreadyInCache(string, string);        
 
-        long int getCacheSize();
+        long int getCacheSize(){ return cacheList.size(); };
         unsigned long int getCacheIndex(string);
+
+        void getUrlCaches();
 
 };
 
