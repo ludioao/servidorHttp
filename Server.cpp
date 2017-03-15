@@ -561,6 +561,8 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
             temporaryCache->print_headers();
 
             response = CreateResponseString(request, response, body, status, temporaryCache);
+
+            
         }    
     }
 
@@ -1062,8 +1064,10 @@ string ClientSocket::receiveFromHost()
     while (recv(sock, buffer, sizeof(buffer) + 1, 0))
     {
         reply += buffer;
+        console_log(buffer);
         memset( buffer, '\0', sizeof(char)*BUFFER_LENGTH );
     }
+
 
     return reply;
 }
