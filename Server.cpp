@@ -99,78 +99,7 @@ HttpServer::~HttpServer() {
 // Definindo MimeTypes.
 void
 HttpServer::InitMimeTypes() {    
-    MimeTypes["doc"]    = "application/msword";
-    MimeTypes["bin"]    = "application/octet-stream";
-    MimeTypes["dll"]    = "application/octet-stream";
-    MimeTypes["exe"]    = "application/octet-stream";
-    MimeTypes["pdf"]    = "application/pdf";
-    MimeTypes["p7c"]    = "application/pkcs7-mime";
-    MimeTypes["ai"]     = "application/postscript";
-    MimeTypes["eps"]    = "application/postscript";
-    MimeTypes["ps"]     = "application/postscript";
-    MimeTypes["rtf"]    = "application/rtf";
-    MimeTypes["fdf"]    = "application/vnd.fdf";
-    MimeTypes["arj"]    = "application/x-arj";
-    MimeTypes["gz"]     = "application/x-gzip";
-    MimeTypes["class"]  = "application/x-java-class";
-    MimeTypes["js"]     = "application/x-javascript";
-    MimeTypes["lzh"]    = "application/x-lzh";
-    MimeTypes["lnk"]    = "application/x-ms-shortcut";
-    MimeTypes["tar"]    = "application/x-tar";
-    MimeTypes["hlp"]    = "application/x-winhelp";
-    MimeTypes["cert"]   = "application/x-x509-ca-cert";
-    MimeTypes["zip"]    = "application/zip";
-    MimeTypes["cab"]    = "application/x-compressed";
-    MimeTypes["arj"]    = "application/x-compressed";
-    MimeTypes["aif"]    = "audio/aiff";
-    MimeTypes["aifc"]   = "audio/aiff";
-    MimeTypes["aiff"]   = "audio/aiff";
-    MimeTypes["au"]     = "audio/basic";
-    MimeTypes["snd"]    = "audio/basic";
-    MimeTypes["mid"]    = "audio/midi";
-    MimeTypes["rmi"]    = "audio/midi";
-    MimeTypes["mp3"]    = "audio/mpeg";
-    MimeTypes["vox"]    = "audio/voxware";
-    MimeTypes["wav"]    = "audio/wav";
-    MimeTypes["ra"]     = "audio/x-pn-realaudio";
-    MimeTypes["ram"]    = "audio/x-pn-realaudio";
-    MimeTypes["bmp"]    = "image/bmp";
-    MimeTypes["gif"]    = "image/gif";
-    MimeTypes["jpeg"]   = "image/jpeg";
-    //MimeTypes["jpg"]    = "image/jpeg";
-    MimeTypes["png"]    = "image/";    
-    MimeTypes["tif"]    = "image/tiff";
-    MimeTypes["tiff"]   = "image/tiff";
-    MimeTypes["xbm"]    = "image/xbm";
-    MimeTypes["wrl"]    = "model/vrml";
-    MimeTypes["htm"]    = "text/html";
-    MimeTypes["html"]   = "text/html";
-    MimeTypes["c"]      = "text/plain";
-    MimeTypes["cpp"]    = "text/plain";
-    MimeTypes["def"]    = "text/plain";
-    MimeTypes["h"]      = "text/plain";
-    MimeTypes["txt"]    = "text/plain";
-    MimeTypes["rtx"]    = "text/richtext";
-    MimeTypes["rtf"]    = "text/richtext";
-    MimeTypes["java"]   = "text/x-java-source";
-    MimeTypes["css"]    = "text/css";
-    MimeTypes["mpeg"]   = "video/mpeg";
-    MimeTypes["mpg"]    = "video/mpeg";
-    MimeTypes["mpe"]    = "video/mpeg";
-    MimeTypes["avi"]    = "video/msvideo";
-    MimeTypes["mov"]    = "video/quicktime";
-    MimeTypes["qt"]     = "video/quicktime";
-    MimeTypes["shtml"]  = "wwwserver/html-ssi";
-    MimeTypes["asa"]    = "wwwserver/isapi";
-    MimeTypes["asp"]    = "wwwserver/isapi";
-    MimeTypes["cfm"]    = "wwwserver/isapi";
-    MimeTypes["dbm"]    = "wwwserver/isapi";
-    MimeTypes["isa"]    = "wwwserver/isapi";
-    MimeTypes["plx"]    = "wwwserver/isapi";
-    MimeTypes["url"]    = "wwwserver/isapi";
-    MimeTypes["cgi"]    = "wwwserver/isapi";
-    MimeTypes["php"]    = "wwwserver/isapi";
-    MimeTypes["wcgi"]   = "wwwserver/isapi";
+    // era usado antes no http server.
 }
 
 
@@ -222,13 +151,6 @@ HttpServer::RunMultiThreaded(bool verbose) {
         client = server.Connect();
         actualConnection = client.first;
 
-  /*      cout << "threadList  " << threadList.size() << endl;
-
-        cout << "actualConnection passou a ser " << actualConnection << endl;
-
-        cout << "threadList size is " << threadList.size() << endl;
-        cout << "maxthreads size is " << getMaxThreads() << endl;
-*/
         if (actualConnection > 0) {
             
             // Cria uma nova thread e despacha.
@@ -505,15 +427,6 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
         cacheUrl = host + path;
         console_log("REQUESTED FOR URL " + cacheUrl);
 
-        unsigned long int index = cache.getCacheIndex(cacheUrl);
-
-        // Retrieve from cache.
-      /*  if (index != MAX_NUMBER)
-        {
-            response = cache.createResponseString(index);
-        }
-        else 
-        {*/
             // Download and get file!!!!
             string fileContentRemote = downloadFile(request, host, path, request.get_port());
       /*      body = fileContentRemote.c_str();
@@ -532,7 +445,7 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
             temporaryCache->print_headers();
 
             response = CreateResponseString(request, response, body, status, temporaryCache);*/
-        /*}    */
+        //}
     }
 
     return response;
@@ -560,55 +473,57 @@ HttpServer::removeHeaderFromContent(HttpRequest &request, string &content)
 string
 HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int port)
 {
-    ClientSocket c(request.get_socket());
-
     string headers = "";
-
     string response = "";
     response.clear();
-     
-    //connect to host
-    c.connectToHost(hostName, port);
-     
-    //send some data    
-    string request_data;
-    request_data = "GET " + uri + " HTTP/1.1\n";
-    //request_data.append( HDR_ENDLINE );
-    request_data.append("Host");
-    request_data.append(HDR_DELIMETER);
-    request_data.append(hostName);
-    request_data.append(HDR_ENDLINE);
-    request_data.append("Connection");
-    request_data.append(HDR_DELIMETER);
-    request_data.append("close");
-    request_data.append(HDR_ENDLINE);
-    request_data.append(HDR_ENDLINE);
+    string cacheUrl = hostName+uri;
+    ClientSocket c(request.get_socket(), cacheUrl);
 
-    /*for (auto head : headers)
+    unsigned long int index = cache.getCacheIndex(cacheUrl);
+
+    // Retrieve from cache.
+    if (index != MAX_NUMBER)
     {
+       // ta na cache 
+       console_log("ta na cache");
+       c.receiveFromCache(index);
 
-    }*/
+    }
+    else 
+    {
+        // onde vai ser salvo
+        index = cache.getCacheSize() + 1;
+        //connect to host
+        c.connectToHost(hostName, port);
 
-    
-    console_log("Sending data to server...");
-    console_log(request_data);
-    console_log("");
+        
+        console_log("novo arquivo");
+        //send some data    
+        string request_data;
+        request_data = "GET " + uri + " HTTP/1.1\n";
+        //request_data.append( HDR_ENDLINE );
+        request_data.append("Host");
+        request_data.append(HDR_DELIMETER);
+        request_data.append(hostName);
+        request_data.append(HDR_ENDLINE);
+        request_data.append("Connection");
+        request_data.append(HDR_DELIMETER);
+        request_data.append("close");
+        request_data.append(HDR_ENDLINE);
+        request_data.append(HDR_ENDLINE);
+        
+        console_log("Sending data to server...");
+        //console_log(request_data);
+        console_log("");
 
-    c.sendDataHost(request_data.c_str());
+        c.sendDataHost(request_data.c_str());
+        c.receiveFromHost(index);
+        int size = c.getLength();
+        Cache*item=new Cache(cacheUrl, "", size);
+        item->setNumber(index);
+        cache.storeCache(item);
 
-
-    c.receiveFromHost();
-
-    
-
-
-     
-    //receive and echo reply
-    //response = c.receiveFromHost();
-    response = "";
-
-    // get headers and remove from content.
-    //removeHeaderFromContent(request, response);
+    }
 
     return response;
 
@@ -1051,7 +966,7 @@ ClientSocket::createUrl()
 /**
     Receive data from the connected host
 */
-void ClientSocket::receiveFromHost()
+void ClientSocket::receiveFromHost(int currentId)
 {   
 
     char buffer[4096];
@@ -1064,35 +979,77 @@ void ClientSocket::receiveFromHost()
     int response_code=-1;
     int cfd=-1;
     bzero((char*)buffer, 4096);
+        
     
-    
+    string filepath = getCachePath(currentId);    
+
+    console_log("write cache to " + filepath);
+
+    size_t tamanho=0;
     // buffer.
     do {       
        bzero((char*)buffer, 4096);
        n = recv(serverRemoto, buffer, 4096, 0);
+       tamanho +=n;
        
        // recebeu algo 
        if(n > 0)  {           
+
              if(cfd == -1)
              {
                 float ver;
                 sscanf(buffer, "HTTP/%f %d", &ver, &response_code);
+                if((cfd = open(filepath.c_str(), O_RDWR|O_TRUNC|O_CREAT, S_IRWXU)) < 0)
+                {
+                     perror("failed to create CacheDir file");
+                     exit(0);                     
+                }
                 // tratar cache aqui.
              }                 
              send(socketClienteBrowser, buffer, n, 0);
+             write(cfd, buffer, n);
              //write(cfd, )
              //goto end;
        }
             
     } while (n > 0);
 
+
+// seta o tamanho da resposta p/ adicionar no vector de cache
+    setLength(tamanho);
 //    close(cacheFromDir);
     close(socketClienteBrowser);
     close(serverRemoto);
 
 }
 
-void ClientSocket::getFileName(string Url)
+/*
+receive data from file 
+*/
+void ClientSocket::receiveFromCache(int i)
 {
+    string filepath = getCachePath(i);
+    int cfd=-1, n=1;
+    char buffer[4096];
+
+    console_log("abrindo o arquivo "  + filepath);
+
+    if((cfd = open (filepath.c_str(), O_RDONLY)) < 0)
+    {
+       perror("failed to open CacheDir file");
+       return;
+    }
     
+    while (n > 0) 
+    {
+            bzero((char*)buffer, 4096);
+            n = read(cfd, buffer, 4096);
+            if(n > 0)
+            {
+                send(sock_browser, buffer, n, 0);
+            }
+    }
+    close(cfd);
+    close(sock_browser);
+
 }

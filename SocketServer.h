@@ -103,7 +103,14 @@ class ClientSocket {
         ClientSocket(int val, string url);
         bool connectToHost(string, int);
         bool sendDataHost(string data);
-        void receiveFromHost();
+        void receiveFromHost(int currentId);
+        void receiveFromCache(int i);
+        string getCachePath(int i){ return "./cache/" +  std::to_string(i) + ".cache"; };
+        
+        ssize_t length;
+        ssize_t getLength(){return length;};
+        void setLength(ssize_t l){length=l;};
+
 };
 
 

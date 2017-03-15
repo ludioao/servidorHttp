@@ -136,7 +136,7 @@ CacheService::getCachePath(unsigned long int cacheNumber)
 void 
 CacheService::storeCache(Cache* cacheable)
 {
-    unsigned long int cacheNumber = cacheList.size() + 1;
+    /*unsigned long int cacheNumber = cacheList.size() + 1;
     cacheable->setNumber(cacheNumber);
     string filePath = this->getCachePath(cacheNumber);
 
@@ -144,7 +144,7 @@ CacheService::storeCache(Cache* cacheable)
     cacheFile.open(filePath);
     cacheFile << cacheable->getData();
     cacheFile.close();
-
+*/
     cacheList.push_back(cacheable);
 }
 
