@@ -522,6 +522,14 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
         {
             body = cache.getCacheDataByIndex(index);
             itemCache = cache.getCacheItem(index);
+
+            console_log("cache retrieved >>>");
+            console_log(body);
+            console_log("<<< cache retrieved");
+
+            console_log("header count is " + itemCache->headers.size());
+            
+
             response = CreateResponseString(request, response, body, status, itemCache);
 
             //removeHeaderFromContent(request, response);
@@ -540,7 +548,11 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
             
             removeHeaderFromContent(request, body);
 
-            ltrim(body);
+            ltrim(body); 
+
+            console_log("body retrieved >>> ");   
+            console_log(body);
+            console_log("<<< body retrieved");
 
             Cache* temporaryCache = new Cache(host + path, body, 1024);
             temporaryCache->add_headers( request.get_headers() );
@@ -669,6 +681,10 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
     newresponse += asctime(gmnow);
     newresponse += CRLF;
     newresponse += body;
+
+
+    delete item;
+
     return newresponse;
 }
 
