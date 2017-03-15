@@ -15,7 +15,7 @@ class Cache {
     public:
         vector<const Header*> headers;
         string Data;
-        unsigned long long int Size;
+        size_t Size;
         //string Path;
         string Url;
         //string HostName;
@@ -28,7 +28,7 @@ class Cache {
         Cache();
         ~Cache();
 
-        Cache(string, string, unsigned long long int);
+        Cache(string, string, size_t);
 
         // void set_headresponse(string val){ HeadResponse = val };
         // void get_headresponse() { return HeadResponse };
@@ -57,10 +57,11 @@ class CacheService {
     private:
         // .. cacheList.
         vector<Cache*> cacheList;
+        size_t cacheLimit;
 
     public:
-
-        
+        //CacheService();
+        //CacheService(size_t limit){ this->cacheLimit = limit; };
         
         // ... Cache search
         Cache getCache(string, string);        
@@ -85,6 +86,9 @@ class CacheService {
         unsigned long int getCacheIndex(string);
 
         void getUrlCaches();
+        void removeFromCache();
+        size_t getCacheLimit(){ return cacheLimit; };
+        void setCacheLimit(size_t val) { cacheLimit = 0; };
 
 };
 

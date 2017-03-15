@@ -22,7 +22,7 @@ Cache::Cache()
     this->UsageTime = clock();
 }
 
-Cache::Cache(string Url, string Data, unsigned long long int Size)
+Cache::Cache(string Url, string Data, size_t Size)
 {
     this->Data = Data;
     this->Url = Url;
@@ -40,6 +40,7 @@ Cache::~Cache()
         headers.pop_back();
     }
 }
+
 
 
 
@@ -156,6 +157,47 @@ CacheService::getUrlCaches()
     { 
         cout << "URL at " << i << " is " << cacheList[i]->getUrl() << endl;
     }
+}
+
+
+
+
+void
+CacheService::removeFromCache()
+{
+    // check storage limit
+    size_t currentSize;
+    unsigned long int indexUltimoModificado = MAX_NUMBER;
+    //double elapsedtime = ;
+
+    clock_t lastUsage = clock();
+    clock_t currentUsage;
+
+    for (unsigned int i = 0; i < cacheList.size(); i++)
+     {
+       currentSize += cacheList[i]->Size;
+               
+        // Implementacao FIFO
+          currentUsage = cacheList[i]->UsageTime;
+            if (lastUsage > currentUsage)
+               {
+                   lastUsage = currentUsage;
+                   indexUltimoModificado = cacheList[i]->getNumber();
+                }
+    }
+          
+       if (cacheList.size() > 1 && currentSize > this->getCacheLimit())
+            {
+                if (indexUltimoModificado != MAX_NUMBER) {
+                    
+                    string filepath = getCachePath(indexUltimoModificado);
+                    remove(filepath.c_str());
+                    cacheList[indexUltimoModificado]->Size = 0;
+                    cacheList[indexUltimoModificado]->Url = "removed_from_cache";
+                    //cacheList.erase(cacheList.begin() + indexUltimoModificado);
+                }
+            }
+
 }
 
 

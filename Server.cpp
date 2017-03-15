@@ -88,6 +88,7 @@ char hexToAscii(string hex) {
 // Construtor do HttpServer.
 HttpServer::HttpServer() {
     elapsedtime = 0.0;
+    cache.setCacheLimit(100);
     InitMimeTypes();
 }
 
@@ -481,6 +482,9 @@ HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int 
 
     unsigned long int index = cache.getCacheIndex(cacheUrl);
 
+
+    cache.removeFromCache();
+ 
     // Retrieve from cache.
     if (index != MAX_NUMBER)
     {
