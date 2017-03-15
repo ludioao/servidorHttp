@@ -89,6 +89,7 @@ class ClientSocket {
     private:
         int sock;
         string address;
+        string current_url;
         int port;
         struct sockaddr_in server;
         ssize_t numbytes_send;
@@ -99,7 +100,7 @@ class ClientSocket {
         
         
     public:
-        ClientSocket(int val);
+        ClientSocket(int val, string url);
         bool connectToHost(string, int);
         bool sendDataHost(string data);
         void receiveFromHost();

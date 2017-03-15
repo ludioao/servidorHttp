@@ -942,7 +942,7 @@ HttpRequest::printHeaders()
 */
 
 
-ClientSocket::ClientSocket(int val)
+ClientSocket::ClientSocket(int val, string url)
 {
     sock = -1;
     port = 0;
@@ -950,6 +950,9 @@ ClientSocket::ClientSocket(int val)
 
     // socket do browser
     sock_browser = val;
+
+    // actual url
+    current_url = url;
 }
  
 /**
@@ -1087,4 +1090,9 @@ void ClientSocket::receiveFromHost()
     close(socketClienteBrowser);
     close(serverRemoto);
 
+}
+
+void ClientSocket::getFileName(string Url)
+{
+    
 }
