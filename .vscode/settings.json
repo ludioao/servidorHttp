@@ -5,6 +5,7 @@
         "map": "cpp",
         "string": "cpp",
         "*.ipp": "cpp",
-        "vector": "cpp"
+        "vector": "cpp",
+        "iosfwd": "cpp"
     }
 }

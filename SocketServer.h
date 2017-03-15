@@ -91,12 +91,18 @@ class ClientSocket {
         string address;
         int port;
         struct sockaddr_in server;
+        ssize_t numbytes_send;
+        ssize_t numbytes_recv;
+        char messageBf[4096];
+
+        int sock_browser;
+        
         
     public:
-        ClientSocket();
+        ClientSocket(int val);
         bool connectToHost(string, int);
         bool sendDataHost(string data);
-        string receiveFromHost();
+        void receiveFromHost();
 };
 
 

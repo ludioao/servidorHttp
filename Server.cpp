@@ -284,6 +284,9 @@ HttpServer::DispatchRequestToThread(bool verbose, pair<int, string> client) {
 
     do {
         if (server.Receive(verbose, client)) { 
+
+            request->set_socket(actualConnection);
+
             // Recebe a requisicao e responde.
             ParseRequest(*request, verbose, server.get_buffer());
 
@@ -292,7 +295,10 @@ HttpServer::DispatchRequestToThread(bool verbose, pair<int, string> client) {
 
             // Trava a mutex antes de chama-lo.
             response = getThreadRequest(*request, verbose);
-            server.SendResponse(response, actualConnection);
+
+            //server.sendHeader();
+
+            //server.SendResponse(response, actualConnection);
         }
         // Calcula o tempo corrido.
         time(&end);
@@ -388,21 +394,24 @@ HttpServer::ParseRequest(HttpRequest& request, bool verbose, const char* recvbuf
                 cout << "Versao do HTTP invalida..\n";
                 request.set_invalid(true);
                 return;
-            }
-            console_log("server requested.....");
-            console_log("uri selected => " + uri);
-            console_log("Method: " + method);
-            console_log("version: " + version);
-            console_log("copy: " + copy);
-            console_log("path: " + path);
-            console_log("query: " + query);
-            console_log("hostname: " + hostName);
-            console_log("port: " + port);
-            console_log(".............................");
-            path = uri;
+            } 
+            else {
+                console_log("server requested.....");
+                console_log("uri selected => " + uri);
+                console_log("Method: " + method);
+                console_log("version: " + version);
+                console_log("copy: " + copy);
+                console_log("path: " + path);
+                console_log("query: " + query);
+                console_log("hostname: " + hostName);
+                console_log("port: " + port);
+                console_log(".............................");
+                path = uri;
 
-            // Preenche a struct de request.
-            request.Initialize(method, version, copy, path, query, type, hostName, port);
+                // Preenche a struct de request.
+                request.Initialize(method, version, copy, path, query, type, hostName, port, request.get_socket());    
+            }
+            
     }
 
    
@@ -461,7 +470,7 @@ HttpServer::HandleRequest(HttpRequest& request, bool verbose) {
 
     // Send response
     if (verbose) {
-        //cout << endl << "Response: " << response << endl << endl;
+        cout << endl << "Response: " << response << endl << endl;
     }
     return response;
 }
@@ -499,15 +508,15 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
         unsigned long int index = cache.getCacheIndex(cacheUrl);
 
         // Retrieve from cache.
-        if (index != MAX_NUMBER)
+      /*  if (index != MAX_NUMBER)
         {
             response = cache.createResponseString(index);
         }
         else 
-        {
+        {*/
             // Download and get file!!!!
             string fileContentRemote = downloadFile(request, host, path, request.get_port());
-            body = fileContentRemote.c_str();
+      /*      body = fileContentRemote.c_str();
             ltrim(body);
             
             // Save to Cache    
@@ -522,8 +531,8 @@ HttpServer::HandleGet(HttpRequest request, http_status_t status) {
             cache.storeCache(temporaryCache);            
             temporaryCache->print_headers();
 
-            response = CreateResponseString(request, response, body, status, temporaryCache);
-        }    
+            response = CreateResponseString(request, response, body, status, temporaryCache);*/
+        /*}    */
     }
 
     return response;
@@ -551,7 +560,7 @@ HttpServer::removeHeaderFromContent(HttpRequest &request, string &content)
 string
 HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int port)
 {
-    ClientSocket c;
+    ClientSocket c(request.get_socket());
 
     string headers = "";
 
@@ -579,15 +588,24 @@ HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int 
     {
 
     }*/
-            
+
+    
     console_log("Sending data to server...");
     console_log(request_data);
     console_log("");
 
     c.sendDataHost(request_data.c_str());
+
+
+    c.receiveFromHost();
+
+    
+
+
      
     //receive and echo reply
-    response = c.receiveFromHost( );
+    //response = c.receiveFromHost();
+    response = "";
 
     // get headers and remove from content.
     //removeHeaderFromContent(request, response);
@@ -648,16 +666,7 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
     newresponse += DATE;
     newresponse += asctime(gmnow);
     newresponse += CRLF;
-
-    console_log("::: BEGIN RESPONSE HEADER :::");
-    console_log(newresponse);
-    console_log("::: END HEADER :::");
-
-    
-
     newresponse += body;
-
-
 
     return newresponse;
 }
@@ -811,15 +820,15 @@ HttpServer::ParseUri(string& uri, string& path, string& query, string& type, str
 
 /*Funcoes do HTTPREQUEST.*/
 
-HttpRequest::HttpRequest(http_method_t method, http_version_t version, string copy, string path, string query, string type,  string hostName, int port) {
-    Initialize(method, version, copy, path, query, type, hostName, port);
+HttpRequest::HttpRequest(http_method_t method, http_version_t version, string copy, string path, string query, string type,  string hostName, int port, int connection) {
+    Initialize(method, version, copy, path, query, type, hostName, port, connection);
 }
 
 HttpRequest::HttpRequest() {
-    Initialize(INVALID_METHOD, INVALID_VERSION, "", "", "", "", "", 80);
+    Initialize(INVALID_METHOD, INVALID_VERSION, "", "", "", "", "", 80, -1);
 }
 
-void HttpRequest::Initialize(http_method_t method, http_version_t version, string copy, string path, string query, string type,  string hostName, int port) {
+void HttpRequest::Initialize(http_method_t method, http_version_t version, string copy, string path, string query, string type,  string hostName, int port,  int connection) {
     toolong = false;
     this->method = method;
     this->version = version;
@@ -830,6 +839,7 @@ void HttpRequest::Initialize(http_method_t method, http_version_t version, strin
     this->host_name = hostName;
     this->port = port;
     this->invalid = false;
+    this->connection = connection;
 }
 
 void HttpRequest::ParseHeaders(const char* buffer, int index) {
@@ -932,11 +942,14 @@ HttpRequest::printHeaders()
 */
 
 
-ClientSocket::ClientSocket()
+ClientSocket::ClientSocket(int val)
 {
     sock = -1;
     port = 0;
     address = "";
+
+    // socket do browser
+    sock_browser = val;
 }
  
 /**
@@ -1013,7 +1026,9 @@ bool ClientSocket::connectToHost(string address , int port)
 bool ClientSocket::sendDataHost(string data)
 {
     //Send some data
-    if( send(sock , data.c_str() , strlen( data.c_str() ) , 0) < 0)
+    //numbytes_send = send(sock , data.c_str() , strlen( data.c_str() ) , 0);
+    numbytes_send = write(sock, data.c_str(), strlen(data.c_str()));
+    if(numbytes_send  < 0)
     {
         perror("Send failed : ");
         return false;
@@ -1022,36 +1037,54 @@ bool ClientSocket::sendDataHost(string data)
      
     return true;
 }
- 
+
+
+/*string 
+ClientSocket::createUrl()
+{
+
+}*/
+
 /**
     Receive data from the connected host
 */
-string ClientSocket::receiveFromHost()
-{
+void ClientSocket::receiveFromHost()
+{   
+
+    char buffer[4096];
+    console_log("Receiving bytes from host " + std::to_string(numbytes_send));
+    int cacheFromDir = -1;
+    int bytes_recvd = -1;
+    int serverRemoto = sock;
+    int socketClienteBrowser = sock_browser;
+    int n;
+    int response_code=-1;
+    int cfd=-1;
+    bzero((char*)buffer, 4096);
     
-    char buffer[BUFFER_LENGTH];
-    memset( buffer, '\0', sizeof(char)*BUFFER_LENGTH );
-    string reply = "";
-  
-    while (recv(sock, buffer, sizeof(buffer) + 1, 0))
-    {
-        reply += buffer;
-        //console_log(buffer);
-        memset( buffer, '\0', sizeof(char)*BUFFER_LENGTH );
-    }
+    
+    // buffer.
+    do {       
+       bzero((char*)buffer, 4096);
+       n = recv(serverRemoto, buffer, 4096, 0);
+       
+       // recebeu algo 
+       if(n > 0)  {           
+             if(cfd == -1)
+             {
+                float ver;
+                sscanf(buffer, "HTTP/%f %d", &ver, &response_code);
+                // tratar cache aqui.
+             }                 
+             send(socketClienteBrowser, buffer, n, 0);
+             //write(cfd, )
+             //goto end;
+       }
+            
+    } while (n > 0);
 
+//    close(cacheFromDir);
+    close(socketClienteBrowser);
+    close(serverRemoto);
 
-    return reply;
 }
- 
-
-
-
-
-
-
-
-
-
-
-

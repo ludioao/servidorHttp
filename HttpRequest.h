@@ -77,9 +77,10 @@ class HttpRequest {
         bool invalid;
         int port;
         bool toolong;
+        int connection;
         
     public:
-        HttpRequest(http_method_t method, http_version_t version, string copy, string path, string query, string type, string hostName, int port);
+        HttpRequest(http_method_t method, http_version_t version, string copy, string path, string query, string type, string hostName, int port, int connection);
         HttpRequest();
         ~HttpRequest();
 
@@ -89,7 +90,7 @@ class HttpRequest {
         }
 
         // Inicializacao do Request
-        void Initialize(http_method_t method, http_version_t version, string copy, string path, string query, string type,  string hostName, int port);
+        void Initialize(http_method_t method, http_version_t version, string copy, string path, string query, string type,  string hostName, int port,  int connection);
         void Reset();
 
         // Parseamento do cabecalho.
@@ -107,6 +108,9 @@ class HttpRequest {
         bool get_invalid() { return invalid; };
         int get_port() { return port; };
         bool get_flag() { return toolong; }
+        int get_socket() { return connection; };
+
+        
 
         // Setters
         void set_method(http_method_t method) { this->method = method; }
@@ -117,6 +121,7 @@ class HttpRequest {
         void set_query(string query) { this->query = query; }
         void set_flag(bool value) { toolong = value; }
         void set_invalid(bool value) { invalid = value; };
+        void set_socket(int val) { this->connection = val; };
 
         void printHeaders();
 
