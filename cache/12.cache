@@ -1,0 +1,9 @@
+HTTP/1.1 302 Found
+Date: Wed, 15 Mar 2017 22:48:18 GMT
+Server: Apache/2.4.7 (Ubuntu)
+X-Powered-By: PHP/5.5.9-1ubuntu4.17
+Location: ./public/
+Content-Length: 0
+Connection: close
+Content-Type: text/html
+

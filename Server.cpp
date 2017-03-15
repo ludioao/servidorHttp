@@ -88,7 +88,6 @@ char hexToAscii(string hex) {
 // Construtor do HttpServer.
 HttpServer::HttpServer() {
     elapsedtime = 0.0;
-    cache.setCacheLimit(100);
     InitMimeTypes();
 }
 
@@ -111,18 +110,22 @@ Port_Operacao => Porta para iniciar Operacao;
 numberThreads => Quando o tipo de servidor eh Multithread. Entao utiliza-se o numero de threads fixo.
 */
 void 
-HttpServer::Start(bool verbose, long int port_Operacao) {
+HttpServer::Start(bool verbose, long int port_Operacao, size_t megas) {
     
     signal(SIGINT, handleSigint); // Envia sinal de inicializacao. 
     signal(SIGCHLD, handleSigchld); // Envia sinal p/ processo filho.
 
     // Porta default
     server.setPortNumber(port_Operacao);
+    
     server.Init();
 
     long int actualPortNumber = server.getPortNumber();
 
-    console_log("Inicializando servidor na porta " + actualPortNumber);
+    cache.setCacheLimit(megas * 1000000);
+
+    cout << "Inicializando servidor na porta " << actualPortNumber << endl;
+    cout << "Tamanho da cache eh " << megas << "MB" << endl ;
     
     // Recebe o tipo de arquivo.
     //server.setMaxThreads(numberThreads);
@@ -483,7 +486,7 @@ HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int 
     unsigned long int index = cache.getCacheIndex(cacheUrl);
 
 
-    cache.removeFromCache();
+    
  
     // Retrieve from cache.
     if (index != MAX_NUMBER)
@@ -495,6 +498,7 @@ HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int 
     }
     else 
     {
+        cache.removeFromCache();
         // onde vai ser salvo
         index = cache.getCacheSize() + 1;
         //connect to host

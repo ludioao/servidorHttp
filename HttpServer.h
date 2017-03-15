@@ -54,7 +54,7 @@ class HttpServer {
         void InitMimeTypes();
 
         // Metodos p/ trabalhar com requisicoes multi-processos.
-        void Start( bool verbose, long int portNumber);
+        void Start( bool verbose, long int portNumber, size_t megas);
         
         // Metodos p/ trbalhar com threads.
         void RunMultiThreaded(bool verbose);
