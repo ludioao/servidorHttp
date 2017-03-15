@@ -24,6 +24,8 @@ class Cache {
         string HeadResponse;
 
         Cache();
+
+
         Cache(string, string, unsigned long long int);
 
         // void set_headresponse(string val){ HeadResponse = val };
@@ -35,7 +37,16 @@ class Cache {
         unsigned long int getNumber() { return fileNumber; };
         string getData() { return Data; };
         string getUrl() { return Url; };
-
+        inline void Reset() {
+            Url = "";
+            Data = "";
+            fileNumber = MAX_NUMBER;
+            HeadResponse = "";
+            while (!headers.empty()) {
+                delete headers.back();
+                headers.pop_back();
+            }
+        }
 
 };
 

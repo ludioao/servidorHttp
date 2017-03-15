@@ -68,7 +68,7 @@ class HttpServer {
 
         // Metodo p/ tratar envio de resposta.
         string HandleGet(HttpRequest request, http_status_t status);        
-        string CreateResponseString(HttpRequest request, string response, string body, http_status_t status, const Cache* item);   
+        string CreateResponseString(HttpRequest request, string response, string body, http_status_t status, Cache* item);   
 
         // Helpers.
         http_method_t GetMethod(const string method);

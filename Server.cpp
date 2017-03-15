@@ -31,13 +31,8 @@ Arquivo principal do servidor HTTP.
 
 using namespace std;
 
-
 const unsigned char IS_FILE_FLAG = 0x8;
-
-
-
 static bool running = true;
-
 
 // trim from start
 static inline std::string &ltrim(std::string &s) {
@@ -46,10 +41,7 @@ static inline std::string &ltrim(std::string &s) {
     return s;
 }
 
-
-/*
-    Helper para Controle de Signals.
-*/
+// Helper para Controle de Signals.
 void handleSigint(int signum) {
     #ifdef DEBUG_THREAD
         console_log("Signal is " + signum);
@@ -638,7 +630,7 @@ HttpServer::downloadFile(HttpRequest &request, string hostName, string uri, int 
 
 // Criar response string.
 string 
-HttpServer::CreateResponseString(HttpRequest request, string response, string body, http_status_t status, const Cache* item) {
+HttpServer::CreateResponseString(HttpRequest request, string response, string body, http_status_t status, Cache* item) {
     
     time_t now;
     struct tm* gmnow;
@@ -685,7 +677,8 @@ HttpServer::CreateResponseString(HttpRequest request, string response, string bo
     newresponse += body;
 
 
-    delete item;
+    //delete item;
+    item->Reset();
 
     return newresponse;
 }
